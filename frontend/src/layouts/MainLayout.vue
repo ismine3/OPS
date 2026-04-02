@@ -55,10 +55,6 @@
           <el-icon><List /></el-icon>
           <template #title>操作日志</template>
         </el-menu-item>
-        <el-menu-item index="/records">
-          <el-icon><Notebook /></el-icon>
-          <template #title>更新记录</template>
-        </el-menu-item>
       </el-menu>
     </el-aside>
 

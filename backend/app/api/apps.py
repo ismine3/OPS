@@ -4,6 +4,7 @@
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 
 apps_bp = Blueprint('apps', __name__, url_prefix='/api/apps')
 
@@ -88,10 +89,16 @@ def create_app():
              data.get('remark'))
         )
         db.commit()
+        app_id = cursor.lastrowid
+        
+        # 记录操作日志
+        log_operation('应用系统', 'create', app_id, data.get('name'),
+                     {'company': data.get('company'), 'access_url': data.get('access_url')})
+        
         return jsonify({
             'code': 200,
             'message': '创建成功',
-            'data': {'id': cursor.lastrowid}
+            'data': {'id': app_id}
         })
     except Exception as e:
         db.rollback()
@@ -114,6 +121,11 @@ def update_app(app_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 获取更新前的应用名
+        cursor.execute("SELECT name FROM app_systems WHERE id = %s", (app_id,))
+        old_app = cursor.fetchone()
+        app_name = old_app['name'] if old_app else None
+        
         data = request.json
         fields = []
         values = []
@@ -125,6 +137,10 @@ def update_app(app_id):
             values.append(app_id)
             cursor.execute(f"UPDATE app_systems SET {', '.join(fields)} WHERE id = %s", values)
             db.commit()
+            
+            # 记录操作日志
+            log_operation('应用系统', 'update', app_id, data.get('name') or app_name)
+            
         return jsonify({
             'code': 200,
             'message': '更新成功'
@@ -150,8 +166,17 @@ def delete_app(app_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 获取应用名
+        cursor.execute("SELECT name FROM app_systems WHERE id = %s", (app_id,))
+        old_app = cursor.fetchone()
+        app_name = old_app['name'] if old_app else None
+        
         cursor.execute("DELETE FROM app_systems WHERE id = %s", (app_id,))
         db.commit()
+        
+        # 记录操作日志
+        log_operation('应用系统', 'delete', app_id, app_name)
+        
         return jsonify({
             'code': 200,
             'message': '删除成功'

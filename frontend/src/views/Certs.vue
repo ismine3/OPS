@@ -353,6 +353,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Bell, Upload, Download, Promotion } from '@element-plus/icons-vue'
 import { getCerts, createCert, updateCert, deleteCert, checkCert, checkCerts, syncAliyunCerts, notifyCerts, uploadCertFiles, downloadCertFiles, deleteCertFiles, deployCert, uploadAndCreateCert } from '../api/certs'
 import { getServers } from '../api/servers'
+import { domainValidator, safeText, maxLength, pathValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -427,8 +428,30 @@ const uploadCreateRules = {
 }
 
 const rules = {
-  domain: [{ required: true, message: '请输入域名', trigger: 'blur' }],
-  project_name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
+  domain: [
+    { required: true, message: '请输入域名', trigger: 'blur' },
+    { validator: domainValidator, trigger: 'blur' }
+  ],
+  project_name: [
+    { required: true, message: '请输入项目名称', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  issuer: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  brand: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  cost: [
+    { type: 'number', min: 0, max: 999999, message: '费用范围 0-999999', trigger: 'blur' }
+  ],
+  remark: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 // 平台选项（从服务器列表提取）
@@ -475,6 +498,10 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   pagination.page = 1
   fetchData()
 }
@@ -705,6 +732,15 @@ async function handleDeploy() {
   }
   if (!deployForm.remote_path) {
     ElMessage.warning('请输入远程目录路径')
+    return
+  }
+  // 验证远程路径格式
+  if (!/^\/[^\s]*$/.test(deployForm.remote_path)) {
+    ElMessage.warning('请输入有效的Unix/Linux路径（以/开头）')
+    return
+  }
+  if (deployForm.remote_path.length > 255) {
+    ElMessage.warning('远程目录路径长度不能超过255个字符')
     return
   }
   

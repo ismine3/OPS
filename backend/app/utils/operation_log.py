@@ -10,7 +10,7 @@ from .db import get_db
 logger = logging.getLogger(__name__)
 
 
-def log_operation(module, action, target_id=None, target_name=None, detail=None):
+def log_operation(module, action, target_id=None, target_name=None, detail=None, user_id=None, username=None):
     """
     记录操作日志
     
@@ -20,14 +20,25 @@ def log_operation(module, action, target_id=None, target_name=None, detail=None)
         target_id: 操作对象ID (可选)
         target_name: 操作对象名称 (可选)
         detail: 操作详情，字典格式 (可选)
+        user_id: 执行操作的用户ID (可选，用于登录等特殊场景)
+        username: 执行操作的用户名 (可选，用于登录等特殊场景)
     """
     try:
         db = get_db()
         cursor = db.cursor()
         
         # 获取当前用户信息
-        user_id = g.get('user_id')
-        username = g.get('username', 'unknown')
+        # 优先使用传入的参数（用于登录等特殊场景）
+        # 其次从 g.current_user 读取（jwt_required装饰器设置），再次从 g 对象直接读取（before_request设置）
+        if user_id is not None and username is not None:
+            # 使用传入的用户信息
+            pass
+        elif hasattr(g, 'current_user') and g.current_user:
+            user_id = g.current_user.get('user_id')
+            username = g.current_user.get('username', 'unknown')
+        else:
+            user_id = g.get('user_id')
+            username = g.get('username', 'unknown')
         
         # 获取请求信息
         ip = request.remote_addr if request else None
@@ -81,7 +92,6 @@ MODULE_NAMES = {
     'users': '用户管理',
     'aliyun_accounts': '阿里云账户',
     'tasks': '定时任务',
-    'records': '更新记录',
 }
 
 # 操作类型映射

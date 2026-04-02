@@ -5,9 +5,10 @@ import datetime
 from werkzeug.utils import secure_filename
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 from ..utils.scheduler import (
     add_task_to_scheduler, 
-    remove_task_from_scheduler, 
+    remove_task_from_scheduler,
     get_scheduler_db_config,
     execute_script
 )
@@ -119,6 +120,9 @@ def create_task():
         if db_config:
             add_task_to_scheduler(task_id, script_path, cron_expression, db_config)
         
+        # 记录操作日志
+        log_operation('定时任务', 'create', task_id, name, {'cron': cron_expression})
+        
         return jsonify({
             'code': 200,
             'message': '任务创建成功'
@@ -195,6 +199,9 @@ def update_task(task_id):
             if db_config:
                 add_task_to_scheduler(task_id, script_path, cron_expression, db_config)
         
+        # 记录操作日志
+        log_operation('定时任务', 'update', task_id, name, {'cron': cron_expression})
+        
         return jsonify({
             'code': 200,
             'message': '任务更新成功'
@@ -219,18 +226,21 @@ def delete_task(task_id):
     
     try:
         # 获取任务信息
-        cursor.execute("SELECT script_path FROM scheduled_tasks WHERE id = %s", (task_id,))
+        cursor.execute("SELECT name, script_path FROM scheduled_tasks WHERE id = %s", (task_id,))
         task = cursor.fetchone()
         
         if not task:
             return jsonify({'code': 404, 'message': '任务不存在'}), 404
         
+        task_name = task['name']
+        script_path = task['script_path']
+        
         # 从调度器移除
         remove_task_from_scheduler(task_id)
         
         # 删除脚本文件
-        if task['script_path'] and os.path.exists(task['script_path']):
-            os.remove(task['script_path'])
+        if script_path and os.path.exists(script_path):
+            os.remove(script_path)
         
         # 删除相关日志
         cursor.execute("DELETE FROM task_logs WHERE task_id = %s", (task_id,))
@@ -239,6 +249,9 @@ def delete_task(task_id):
         cursor.execute("DELETE FROM scheduled_tasks WHERE id = %s", (task_id,))
         
         db.commit()
+        
+        # 记录操作日志
+        log_operation('定时任务', 'delete', task_id, task_name)
         
         return jsonify({
             'code': 200,

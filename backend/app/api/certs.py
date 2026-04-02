@@ -471,6 +471,15 @@ def update_cert(cert_id):
             cursor.execute(sql, values)
             db.commit()
         
+        # 获取更新后的域名用于日志
+        cursor.execute("SELECT domain FROM ssl_certificates WHERE id = %s", (cert_id,))
+        cert = cursor.fetchone()
+        domain = cert['domain'] if cert else str(cert_id)
+        
+        # 记录操作日志
+        log_operation(module='证书管理', action='update', target_id=cert_id, target_name=domain,
+                     detail={'updated_fields': list(data.keys())})
+        
         return jsonify({
             'code': 200,
             'message': '更新成功'
@@ -940,6 +949,11 @@ def sync_aliyun_certs():
         
         db.commit()
         
+        # 记录操作日志
+        log_operation(module='证书管理', action='sync', target_id=account_id, target_name=account['account_name'],
+                     detail={'synced': synced_count, 'updated': updated_count, 'skipped': skipped_count,
+                            'downloaded': downloaded_count, 'download_failed': download_failed_count})
+        
         return jsonify({
             'code': 200,
             'message': '同步完成',
@@ -1080,6 +1094,10 @@ def upload_cert_files(cert_id):
         """, (cert_path, key_path, cert_id))
         db.commit()
 
+        # 记录操作日志
+        log_operation(module='证书管理', action='upload', target_id=cert_id, target_name=cert['domain'],
+                     detail={'has_key': key_file is not None})
+
         return jsonify({
             'code': 200,
             'message': '上传成功',
@@ -1169,7 +1187,7 @@ def delete_cert_files(cert_id):
     try:
         # 查询证书记录
         cursor.execute("""
-            SELECT cert_file_path, key_file_path, has_cert_file
+            SELECT domain, cert_file_path, key_file_path, has_cert_file
             FROM ssl_certificates WHERE id = %s
         """, (cert_id,))
         cert = cursor.fetchone()
@@ -1192,6 +1210,10 @@ def delete_cert_files(cert_id):
             WHERE id = %s
         """, (cert_id,))
         db.commit()
+
+        # 记录操作日志
+        log_operation(module='证书管理', action='delete', target_id=cert_id, target_name=cert['domain'],
+                     detail={'operation': '删除证书文件'})
 
         return jsonify({
             'code': 200,

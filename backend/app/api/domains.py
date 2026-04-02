@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, current_app
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.ssl_checker import send_domain_expiry_notification
+from ..utils.operation_log import log_operation
 
 domains_bp = Blueprint('domains', __name__, url_prefix='/api/domains')
 
@@ -168,6 +169,9 @@ def create_domain():
         db.commit()
         domain_id = cursor.lastrowid
         
+        # 记录操作日志
+        log_operation('域名管理', 'create', domain_id, domain_name, {'registrar': data.get('registrar')})
+        
         return jsonify({
             'code': 200,
             'message': '域名添加成功',
@@ -260,6 +264,9 @@ def update_domain(domain_id):
         cursor.execute(sql, update_values)
         db.commit()
         
+        # 记录操作日志
+        log_operation('域名管理', 'update', domain_id, data.get('domain_name'))
+        
         return jsonify({
             'code': 200,
             'message': '域名更新成功'
@@ -287,17 +294,23 @@ def delete_domain(domain_id):
     db = get_db()
     cursor = db.cursor()
     try:
-        # 检查域名是否存在
-        cursor.execute("SELECT id FROM domains WHERE id = %s", (domain_id,))
-        if not cursor.fetchone():
+        # 获取域名名称
+        cursor.execute("SELECT domain_name FROM domains WHERE id = %s", (domain_id,))
+        domain = cursor.fetchone()
+        if not domain:
             return jsonify({
                 'code': 404,
                 'message': '域名不存在'
             }), 404
         
+        domain_name = domain['domain_name']
+        
         # 删除域名
         cursor.execute("DELETE FROM domains WHERE id = %s", (domain_id,))
         db.commit()
+        
+        # 记录操作日志
+        log_operation('域名管理', 'delete', domain_id, domain_name)
         
         return jsonify({
             'code': 200,
@@ -471,8 +484,27 @@ def sync_aliyun_domains():
                     else:
                         dns_servers = ''
                     
-                    domain_status = (getattr(domain, 'domain_status', None) 
-                                     or getattr(domain, 'DomainStatus', None) or '正常')
+                    # 获取域名状态和过期状态
+                    domain_status_raw = (getattr(domain, 'domain_status', None) 
+                                         or getattr(domain, 'DomainStatus', None))
+                    expiration_status_raw = (getattr(domain, 'expiration_date_status', None) 
+                                             or getattr(domain, 'ExpirationDateStatus', None))
+                    
+                    # 综合判断状态：优先显示过期状态，再显示域名状态
+                    # ExpirationDateStatus: 1-未过期, 2-已过期
+                    # DomainStatus: 1-急需续费, 2-急需赎回, 3-正常
+                    if expiration_status_raw == 2 or expiration_status_raw == '2':
+                        domain_status = 4  # 已过期
+                    elif domain_status_raw in [1, '1']:
+                        domain_status = 1  # 急需续费
+                    elif domain_status_raw in [2, '2']:
+                        domain_status = 2  # 急需赎回
+                    elif domain_status_raw in [3, '3']:
+                        domain_status = 3  # 正常
+                    elif domain_status_raw is None:
+                        domain_status = 3  # 默认正常
+                    else:
+                        domain_status = domain_status_raw
                     
                     domain_info = {
                         'domain_name': domain_name,

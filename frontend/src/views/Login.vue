@@ -31,6 +31,7 @@ import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
+import { safeText, maxLength } from '@/utils/validators'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -43,8 +44,15 @@ const form = reactive({
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { validator: maxLength(128), trigger: 'blur' }
+  ]
 }
 
 async function handleLogin() {

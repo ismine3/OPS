@@ -43,7 +43,7 @@ def login():
     
     if not user:
         # 记录登录失败
-        log_operation(module='用户认证', action='login_failed', target_name=username, detail={'reason': '用户不存在'})
+        log_operation(module='用户认证', action='login_failed', target_name=username, detail={'reason': '用户不存在'}, user_id=None, username=username)
         return jsonify({
             'code': 401,
             'message': '用户名或密码错误'
@@ -51,7 +51,7 @@ def login():
     
     # 检查用户是否激活
     if not user.get('is_active'):
-        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '用户已禁用'})
+        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '用户已禁用'}, user_id=user['id'], username=username)
         return jsonify({
             'code': 401,
             'message': '用户已被禁用'
@@ -59,14 +59,14 @@ def login():
     
     # 验证密码
     if not check_password_hash(user['password_hash'], password):
-        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '密码错误'})
+        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '密码错误'}, user_id=user['id'], username=username)
         return jsonify({
             'code': 401,
             'message': '用户名或密码错误'
         }), 401
     
     # 记录登录成功
-    log_operation(module='用户认证', action='login', target_id=user['id'], target_name=username)
+    log_operation(module='用户认证', action='login', target_id=user['id'], target_name=username, user_id=user['id'], username=username)
     
     # 生成 token
     token = generate_token(

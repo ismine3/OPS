@@ -83,8 +83,6 @@ def init_database():
         `version` VARCHAR(100) COMMENT '版本',
         `inner_port` VARCHAR(200) COMMENT '内网端口',
         `mapped_port` VARCHAR(200) COMMENT '外网映射端口',
-        `public_ip` VARCHAR(50) COMMENT '外网IP',
-        `inner_ip` VARCHAR(50) COMMENT '内网IP',
         `remark` TEXT COMMENT '备注',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -145,23 +143,6 @@ def init_database():
     """)
 
 
-
-    # 7. 更新记录表
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS `change_records` (
-        `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `seq_no` INT COMMENT '序号',
-        `change_date` DATE COMMENT '日期',
-        `modifier` VARCHAR(100) COMMENT '修改人',
-        `location` VARCHAR(300) COMMENT '修改位置',
-        `content` TEXT COMMENT '修改内容',
-        `remark` TEXT COMMENT '备注',
-        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX `idx_change_date` (`change_date`),
-        INDEX `idx_modifier` (`modifier`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='更新记录表';
-    """)
 
     # 8. 定时任务表（为 Task 4 预留）
     cursor.execute("""

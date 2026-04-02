@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard-container">
-    <!-- 统计卡片 -->
+    <!-- 统计卡片 - 一行6个 -->
     <el-row :gutter="16" class="stat-row">
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
         <div class="stat-card blue-gradient" @click="$router.push('/servers')">
           <el-icon :size="40" class="stat-icon"><Monitor /></el-icon>
           <div class="stat-info">
@@ -11,7 +11,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
         <div class="stat-card green-gradient" @click="$router.push('/services')">
           <el-icon :size="40" class="stat-icon"><SetUp /></el-icon>
           <div class="stat-info">
@@ -20,7 +20,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
         <div class="stat-card purple-gradient" @click="$router.push('/apps')">
           <el-icon :size="40" class="stat-icon"><Grid /></el-icon>
           <div class="stat-info">
@@ -29,7 +29,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
         <div class="stat-card red-gradient" @click="$router.push('/domains')">
           <el-icon :size="40" class="stat-icon"><Link /></el-icon>
           <div class="stat-info">
@@ -38,7 +38,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
         <div class="stat-card orange-gradient" @click="$router.push('/certs')">
           <el-icon :size="40" class="stat-icon"><Document /></el-icon>
           <div class="stat-info">
@@ -47,109 +47,85 @@
           </div>
         </div>
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
-        <div class="stat-card cyan-gradient" @click="$router.push('/records')">
-          <el-icon :size="40" class="stat-icon"><Notebook /></el-icon>
+      <el-col :xs="24" :sm="12" :md="4" :lg="4" class="stat-col">
+        <div class="stat-card danger-gradient" @click="$router.push('/certs')">
+          <el-icon :size="40" class="stat-icon"><Warning /></el-icon>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.counts?.records || 0 }}</div>
-            <div class="stat-label">更新记录</div>
+            <div class="stat-value">{{ stats.counts?.expiring_certs || 0 }}</div>
+            <div class="stat-label">即将过期证书</div>
           </div>
         </div>
       </el-col>
     </el-row>
 
-    <!-- 中间行：环境分布 + 到期提醒 -->
-    <el-row :gutter="20" class="middle-row">
-      <el-col :span="12">
-        <el-card class="table-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Monitor /></el-icon>
-              <span>服务器环境分布</span>
-            </div>
-          </template>
-          <el-table :data="stats.env_distribution || []" stripe v-loading="loading">
-            <el-table-column prop="env_type" label="环境类型" min-width="120">
-              <template #default="{ row }">
-                <el-tag :type="getEnvTagType(row.env_type)">{{ row.env_type }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="count" label="数量" min-width="80" align="center" />
-            <el-table-column label="占比" min-width="100">
-              <template #default="{ row }">
-                <el-progress 
-                  :percentage="getPercentage(row.count)" 
-                  :color="getProgressColor(row.env_type)"
-                  :show-text="false"
-                  :stroke-width="8"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!stats.env_distribution?.length" description="暂无数据" />
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card class="table-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Timer /></el-icon>
-              <span>域名/证书到期提醒</span>
-            </div>
-          </template>
-          <el-table :data="stats.recent_certs || []" stripe v-loading="loading" max-height="300">
-            <el-table-column prop="domain" label="域名" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="project_name" label="项目" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="cert_expire_time" label="到期时间" min-width="120">
-              <template #default="{ row }">
-                {{ row.cert_expire_time ? row.cert_expire_time.substring(0, 10) : '-' }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="remaining_days" label="剩余天数" min-width="90" align="center">
-              <template #default="{ row }">
-                <el-tag :type="getDaysTagType(row.remaining_days)" size="small">
-                  {{ row.remaining_days }}天
-                </el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!stats.recent_certs?.length" description="暂无到期提醒" />
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 底部：最近更新记录 -->
-    <el-card class="table-card">
+    <!-- 到期提醒（全宽） -->
+    <el-card class="table-card expiry-card">
       <template #header>
         <div class="card-header">
-          <el-icon><Notebook /></el-icon>
-          <span>最近更新记录</span>
+          <el-icon><Timer /></el-icon>
+          <span>域名/证书到期提醒</span>
         </div>
       </template>
-      <el-table :data="stats.recent_records || []" stripe v-loading="loading">
-        <el-table-column prop="seq_no" label="编号" min-width="80" />
-        <el-table-column prop="change_date" label="变更日期" min-width="100" />
-        <el-table-column prop="modifier" label="修改人" min-width="100" />
-        <el-table-column prop="location" label="修改位置" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="content" label="修改内容" min-width="300" show-overflow-tooltip />
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
+      <el-table :data="stats.recent_certs || []" stripe v-loading="loading">
+        <el-table-column prop="domain" label="域名" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="project_name" label="项目" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="cert_expire_time" label="到期时间" min-width="120">
+          <template #default="{ row }">
+            {{ row.cert_expire_time ? row.cert_expire_time.substring(0, 10) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="remaining_days" label="剩余天数" min-width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getDaysTagType(row.remaining_days)" size="small">
+              {{ row.remaining_days }}天
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" min-width="100" align="center">
+          <template #default="{ row }">
+            <el-tag type="info" size="small">{{ row.type === 'domain' ? '域名' : '证书' }}</el-tag>
+          </template>
+        </el-table-column>
       </el-table>
-      <el-empty v-if="!stats.recent_records?.length" description="暂无更新记录" />
+      <el-empty v-if="!stats.recent_certs?.length" description="暂无到期提醒" />
+    </el-card>
+
+    <!-- 服务器环境分布 -->
+    <el-card class="table-card env-card">
+      <template #header>
+        <div class="card-header">
+          <el-icon><Monitor /></el-icon>
+          <span>服务器环境分布</span>
+        </div>
+      </template>
+      <div class="env-distribution">
+        <div v-for="item in stats.env_distribution || []" :key="item.env_type" class="env-item">
+          <div class="env-header">
+            <el-tag :type="getEnvTagType(item.env_type)" size="large">{{ item.env_type }}</el-tag>
+            <span class="env-count">{{ item.count }} 台</span>
+          </div>
+          <el-progress 
+            :percentage="getPercentage(item.count)" 
+            :color="getProgressColor(item.env_type)"
+            :stroke-width="12"
+          />
+        </div>
+      </div>
+      <el-empty v-if="!stats.env_distribution?.length" description="暂无服务器数据" />
     </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Monitor, SetUp, Grid, Document, Notebook, Timer, Link } from '@element-plus/icons-vue'
+import { Monitor, SetUp, Grid, Document, Timer, Link, Warning } from '@element-plus/icons-vue'
 import { getDashboardStats } from '../api/dashboard'
 
 const loading = ref(false)
 const stats = reactive({
   counts: {},
   env_distribution: [],
-  recent_certs: [],
-  recent_records: []
+  recent_certs: []
 })
 
 const totalServers = computed(() => {
@@ -208,14 +184,13 @@ function getDaysTagType(days) {
 }
 
 .stat-row {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   display: flex;
   flex-wrap: wrap;
 }
 
 .stat-col {
-  flex: 1 1 0;
-  max-width: 16.666%;
+  margin-bottom: 12px;
 }
 
 .stat-card {
@@ -225,14 +200,16 @@ function getDaysTagType(days) {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.3s;
+  transition: transform 0.3s, box-shadow 0.3s;
   display: flex;
   align-items: center;
   gap: 12px;
+  height: 80px;
 }
 
 .stat-card:hover {
   transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
 .stat-card::before {
@@ -270,6 +247,10 @@ function getDaysTagType(days) {
   background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
 }
 
+.danger-gradient {
+  background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+}
+
 .stat-icon {
   opacity: 0.9;
 }
@@ -290,18 +271,8 @@ function getDaysTagType(days) {
   margin-top: 4px;
 }
 
-.middle-row {
-  margin-bottom: 20px;
-  display: flex;
-  align-items: stretch;
-}
-
-.middle-row > .el-col > .el-card {
-  height: 100%;
-}
-
 .table-card {
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 
 .table-card :deep(.el-card__header) {
@@ -321,4 +292,39 @@ function getDaysTagType(days) {
   color: #409eff;
 }
 
+/* 环境分布卡片样式 */
+.env-card {
+  margin-bottom: 0;
+}
+
+.env-distribution {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.env-item {
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.env-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.env-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: #606266;
+}
+
+/* 到期提醒卡片样式 */
+.expiry-card {
+  margin-bottom: 16px;
+}
 </style>

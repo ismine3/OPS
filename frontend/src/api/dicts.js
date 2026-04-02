@@ -7,6 +7,13 @@ export function getEnvTypes() {
   })
 }
 
+export function getPlatforms() {
+  return request({
+    url: '/dicts/platforms',
+    method: 'get'
+  })
+}
+
 export function getServiceCategories() {
   return request({
     url: '/dicts/service-categories',

@@ -14,7 +14,6 @@ def import_all():
     cursor = conn.cursor()
 
     try:
-        import_change_records(wb['更新记录表'], cursor)
         import_server_env(wb['数产测试环境台账'], cursor, '测试环境')
         import_server_env(wb['数产生产环境台账'], cursor, '生产环境')
         import_smart_env(wb['智慧环保生产'], cursor)
@@ -79,45 +78,6 @@ def safe_float(val):
         return float(result)
     except (ValueError, TypeError):
         return None
-
-
-def import_change_records(ws, cursor):
-    """导入更新记录表"""
-    print("导入更新记录表...")
-    cursor.execute("DELETE FROM change_records")
-
-    current_seq = None
-    current_date = None
-    current_modifier = None
-    current_location = None
-
-    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, values_only=True):
-        vals = list(row[:6])
-        if all(v is None for v in vals):
-            continue
-
-        seq = vals[0]
-        if seq is not None:
-            current_seq = seq
-            current_date = vals[1]
-            current_modifier = safe_str(vals[2])
-            current_location = safe_str(vals[3])
-
-        content = safe_str(vals[4])
-        remark = safe_str(vals[5])
-
-        if content or remark:
-            date_val = None
-            if isinstance(current_date, datetime):
-                date_val = current_date.strftime('%Y-%m-%d')
-
-            cursor.execute(
-                "INSERT INTO change_records (seq_no, change_date, modifier, location, content, remark) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (current_seq, date_val, current_modifier, current_location, content, remark)
-            )
-
-    print(f"  更新记录导入完成")
 
 
 def import_server_env(ws, cursor, env_type):

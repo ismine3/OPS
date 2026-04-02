@@ -70,6 +70,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAliyunAccounts, createAliyunAccount, updateAliyunAccount, deleteAliyunAccount } from '../api/aliyunAccounts'
+import { safeText, maxLength } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -90,9 +91,23 @@ const form = reactive({
 })
 
 const rules = {
-  account_name: [{ required: true, message: '请输入账户名称', trigger: 'blur' }],
-  access_key_id: [{ required: true, message: '请输入AccessKey ID', trigger: 'blur' }],
-  access_key_secret: [{ required: true, message: '请输入AccessKey Secret', trigger: 'blur' }]
+  account_name: [
+    { required: true, message: '请输入账户名称', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  access_key_id: [
+    { required: true, message: '请输入AccessKey ID', trigger: 'blur' },
+    { validator: maxLength(128), trigger: 'blur' }
+  ],
+  access_key_secret: [
+    { required: true, message: '请输入AccessKey Secret', trigger: 'blur' },
+    { validator: maxLength(128), trigger: 'blur' }
+  ],
+  description: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 onMounted(() => {

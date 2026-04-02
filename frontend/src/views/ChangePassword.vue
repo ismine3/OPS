@@ -55,6 +55,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { changePassword } from '../api/auth'
 import { useUserStore } from '../stores/user'
+import { maxLength, passwordStrength } from '@/utils/validators'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -79,11 +80,12 @@ const validateConfirmPassword = (rule, value, callback) => {
 
 const rules = {
   old_password: [
-    { required: true, message: '请输入旧密码', trigger: 'blur' }
+    { required: true, message: '请输入旧密码', trigger: 'blur' },
+    { validator: maxLength(128), trigger: 'blur' }
   ],
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码最少6位', trigger: 'blur' }
+    { validator: passwordStrength, trigger: 'blur' }
   ],
   confirm_password: [
     { required: true, message: '请再次输入新密码', trigger: 'blur' },

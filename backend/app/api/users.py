@@ -10,6 +10,7 @@ from ..models.user import (
     update_user, delete_user, update_password
 )
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
@@ -84,6 +85,10 @@ def create_new_user():
     
     try:
         user_id = create_user(username, password, display_name, role)
+        
+        # 记录操作日志
+        log_operation('用户管理', 'create', user_id, username, {'role': role})
+        
         return jsonify({
             'code': 200,
             'message': '用户创建成功',
@@ -147,6 +152,9 @@ def update_user_info(user_id):
     try:
         success = update_user(user_id, update_data)
         if success:
+            # 记录操作日志
+            log_operation('用户管理', 'update', user_id, user['username'], update_data)
+            
             return jsonify({
                 'code': 200,
                 'message': '用户更新成功'
@@ -191,6 +199,9 @@ def delete_user_by_id(user_id):
     try:
         success = delete_user(user_id)
         if success:
+            # 记录操作日志
+            log_operation('用户管理', 'delete', user_id, user['username'])
+            
             return jsonify({
                 'code': 200,
                 'message': '用户删除成功'
@@ -251,6 +262,9 @@ def reset_user_password(user_id):
         password_hash = generate_password_hash(new_password)
         success = update_password(user_id, password_hash)
         if success:
+            # 记录操作日志
+            log_operation('用户管理', 'update', user_id, user['username'], {'action': 'reset_password'})
+            
             return jsonify({
                 'code': 200,
                 'message': '密码重置成功'

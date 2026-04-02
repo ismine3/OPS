@@ -42,7 +42,7 @@
         <el-table-column prop="status" label="状态" min-width="80">
           <template #default="{ row }">
             <el-tag :type="getStatusTagType(row.status)" size="small">
-              {{ row.status || '-' }}
+              {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -176,6 +176,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Bell } from '@element-plus/icons-vue'
 import { getDomains, createDomain, updateDomain, deleteDomain, syncAliyunDomains, notifyDomains } from '../api/domains'
+import { domainValidator, safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -216,7 +217,29 @@ const syncForm = reactive({
 })
 
 const rules = {
-  domain_name: [{ required: true, message: '请输入域名', trigger: 'blur' }]
+  domain_name: [
+    { required: true, message: '请输入域名', trigger: 'blur' },
+    { validator: domainValidator, trigger: 'blur' }
+  ],
+  registrar: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  owner: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  dns_server: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  cost: [
+    { type: 'number', min: 0, max: 999999, message: '费用范围 0-999999', trigger: 'blur' }
+  ],
+  remark: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 const syncRules = {
@@ -243,6 +266,10 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   pagination.page = 1
   fetchData()
 }
@@ -363,12 +390,35 @@ function getRemainingDaysTagType(expireDate) {
 
 // 根据状态获取标签类型
 function getStatusTagType(status) {
-  const map = {
+  // 支持数字和中文两种格式
+  const statusMap = {
     '正常': 'success',
     '即将过期': 'warning',
-    '已过期': 'danger'
+    '已过期': 'danger',
+    '申请中': 'info',
+    // 阿里云状态码映射
+    '1': 'danger',   // 急需续费
+    '2': 'danger',   // 急需赎回
+    '3': 'success',  // 正常
+    '4': 'danger'    // 已过期
   }
-  return map[status] || 'info'
+  return statusMap[status] || 'info'
+}
+
+// 状态显示文本转换
+function getStatusText(status) {
+  const textMap = {
+    '正常': '正常',
+    '即将过期': '即将过期',
+    '已过期': '已过期',
+    '申请中': '申请中',
+    // 阿里云状态码映射
+    '1': '急需续费',
+    '2': '急需赎回',
+    '3': '正常',
+    '4': '已过期'
+  }
+  return textMap[status] || status || '-'
 }
 
 // 格式化费用

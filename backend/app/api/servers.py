@@ -14,12 +14,13 @@ servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
 def get_servers():
     """
     获取服务器列表
-    支持查询参数: env_type, search, page, page_size
+    支持查询参数: env_type, platform, search, page, page_size
     """
     db = get_db()
     cursor = db.cursor()
     try:
         env_filter = request.args.get('env_type', '')
+        platform_filter = request.args.get('platform', '')
         search = request.args.get('search', '')
         page = request.args.get('page', '1')
         page_size = request.args.get('page_size', '10')
@@ -44,6 +45,9 @@ def get_servers():
         if env_filter:
             where_clause += " AND env_type = %s"
             params.append(env_filter)
+        if platform_filter:
+            where_clause += " AND platform = %s"
+            params.append(platform_filter)
         if search:
             where_clause += " AND (hostname LIKE %s OR inner_ip LIKE %s OR platform LIKE %s)"
             params.extend([f'%{search}%'] * 3)

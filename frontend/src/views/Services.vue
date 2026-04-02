@@ -130,6 +130,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getServices, createService, updateService, deleteService } from '../api/services'
 import { getServerList } from '../api/servers'
 import { getEnvTypes, getServiceCategories } from '../api/dicts'
+import { safeText, maxLength, portValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -167,7 +168,25 @@ const form = reactive({
 const rules = {
   server_id: [{ required: true, message: '请选择所属服务器', trigger: 'change' }],
   category: [{ required: true, message: '请选择分类', trigger: 'change' }],
-  service_name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }]
+  service_name: [
+    { required: true, message: '请输入服务名称', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(200), trigger: 'blur' }
+  ],
+  version: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  inner_port: [
+    { validator: portValidator, trigger: 'blur' }
+  ],
+  mapped_port: [
+    { validator: portValidator, trigger: 'blur' }
+  ],
+  remark: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 onMounted(() => {
@@ -205,6 +224,10 @@ async function fetchServerList() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   pagination.page = 1
   fetchData()
 }

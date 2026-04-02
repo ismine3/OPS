@@ -5,10 +5,12 @@
       <el-form :model="searchParams" inline>
         <el-form-item label="环境类型">
           <el-select v-model="searchParams.env_type" placeholder="全部环境" clearable style="width: 150px">
-            <el-option label="测试" value="测试" />
-            <el-option label="生产" value="生产" />
-            <el-option label="智慧环保" value="智慧环保" />
-            <el-option label="水电集团" value="水电集团" />
+            <el-option v-for="item in envTypes" :key="item.id" :label="item.name" :value="item.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="平台">
+          <el-select v-model="searchParams.platform" placeholder="全部平台" clearable style="width: 150px">
+            <el-option v-for="item in platforms" :key="item.id" :label="item.name" :value="item.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -73,16 +75,15 @@
           <el-col :span="12">
             <el-form-item label="环境类型" prop="env_type">
               <el-select v-model="form.env_type" placeholder="请选择" style="width: 100%">
-                <el-option label="测试" value="测试" />
-                <el-option label="生产" value="生产" />
-                <el-option label="智慧环保" value="智慧环保" />
-                <el-option label="水电集团" value="水电集团" />
+                <el-option v-for="item in envTypes" :key="item.id" :label="item.name" :value="item.name" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="平台" prop="platform">
-              <el-input v-model="form.platform" placeholder="如：阿里云、VMware" />
+              <el-select v-model="form.platform" placeholder="请选择" style="width: 100%">
+                <el-option v-for="item in platforms" :key="item.id" :label="item.name" :value="item.name" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -179,6 +180,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getServers, createServer, updateServer, deleteServer } from '../api/servers'
+import { getEnvTypes, getPlatforms } from '../api/dicts'
+import { ipValidator, safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
 const router = useRouter()
 const loading = ref(false)
@@ -189,8 +192,13 @@ const dialogTitle = ref('新增服务器')
 const editingId = ref(null)
 const formRef = ref(null)
 
+// 字典数据
+const envTypes = ref([])
+const platforms = ref([])
+
 const searchParams = reactive({
   env_type: '',
+  platform: '',
   search: ''
 })
 
@@ -221,13 +229,78 @@ const form = reactive({
 
 const rules = {
   env_type: [{ required: true, message: '请选择环境类型', trigger: 'change' }],
-  hostname: [{ required: true, message: '请输入主机名', trigger: 'blur' }],
-  inner_ip: [{ required: true, message: '请输入内网IP', trigger: 'blur' }]
+  hostname: [
+    { required: true, message: '请输入主机名', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(200), trigger: 'blur' }
+  ],
+  inner_ip: [
+    { required: true, message: '请输入内网IP', trigger: 'blur' },
+    { validator: ipValidator, trigger: 'blur' }
+  ],
+  mapped_ip: [
+    { validator: ipValidator, trigger: 'blur' }
+  ],
+  public_ip: [
+    { validator: ipValidator, trigger: 'blur' }
+  ],
+  cpu: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  memory: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  sys_disk: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  data_disk: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  purpose: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ],
+  os_user: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  os_password: [
+    { validator: maxLength(200), trigger: 'blur' }
+  ],
+  docker_user: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  docker_password: [
+    { validator: maxLength(200), trigger: 'blur' }
+  ],
+  remark: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 onMounted(() => {
+  fetchDicts()
   fetchData()
 })
+
+async function fetchDicts() {
+  try {
+    const [envRes, platformRes] = await Promise.all([
+      getEnvTypes(),
+      getPlatforms()
+    ])
+    envTypes.value = envRes.data || []
+    platforms.value = platformRes.data || []
+  } catch (e) {
+    console.error('加载字典数据失败', e)
+  }
+}
 
 async function fetchData() {
   loading.value = true
@@ -241,12 +314,17 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   pagination.page = 1
   fetchData()
 }
 
 function handleReset() {
   searchParams.env_type = ''
+  searchParams.platform = ''
   searchParams.search = ''
   pagination.page = 1
   fetchData()

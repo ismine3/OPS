@@ -61,7 +61,6 @@ def register_blueprints(app):
     from .api.services import services_bp
     from .api.apps import apps_bp
     from .api.certs import certs_bp
-    from .api.records import records_bp
     from .api.dashboard import dashboard_bp
     from .api.dicts import dicts_bp
     from .api.aliyun_accounts import aliyun_accounts_bp
@@ -76,7 +75,6 @@ def register_blueprints(app):
     app.register_blueprint(services_bp)
     app.register_blueprint(apps_bp)
     app.register_blueprint(certs_bp)
-    app.register_blueprint(records_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(dicts_bp)
     app.register_blueprint(aliyun_accounts_bp)

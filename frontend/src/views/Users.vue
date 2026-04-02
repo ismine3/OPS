@@ -112,6 +112,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser, resetPassword } from '../api/users'
 import { useUserStore } from '../stores/user'
+import { safeText, maxLength, passwordStrength, isSafeSearch } from '@/utils/validators'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -146,10 +147,18 @@ const resetForm = reactive({
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码最少6位', trigger: 'blur' }
+    { validator: passwordStrength, trigger: 'blur' }
+  ],
+  display_name: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
   ],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
@@ -157,7 +166,7 @@ const rules = {
 const resetRules = {
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码最少6位', trigger: 'blur' }
+    { validator: passwordStrength, trigger: 'blur' }
   ]
 }
 
@@ -176,6 +185,10 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   fetchData()
 }
 

@@ -114,6 +114,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getApps, createApp, updateApp, deleteApp } from '../api/apps'
 import PasswordDisplay from '../components/PasswordDisplay.vue'
+import { safeText, maxLength, urlValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -144,7 +145,33 @@ const form = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入应用名称', trigger: 'blur' }]
+  seq_no: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(50), trigger: 'blur' }
+  ],
+  name: [
+    { required: true, message: '请输入应用名称', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  company: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  access_url: [
+    { validator: urlValidator, trigger: 'blur' }
+  ],
+  username: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  password: [
+    { validator: maxLength(200), trigger: 'blur' }
+  ],
+  remark: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ]
 }
 
 onMounted(() => {
@@ -163,6 +190,10 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   pagination.page = 1
   fetchData()
 }

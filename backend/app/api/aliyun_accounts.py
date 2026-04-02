@@ -5,6 +5,7 @@
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 
 aliyun_accounts_bp = Blueprint('aliyun_accounts', __name__, url_prefix='/api/aliyun-accounts')
 
@@ -107,6 +108,9 @@ def create_account():
         db.commit()
         account_id = cursor.lastrowid
         
+        # 记录操作日志
+        log_operation('阿里云账户', 'create', account_id, account_name, {'description': description})
+        
         return jsonify({
             'code': 200,
             'message': '账户创建成功',
@@ -202,6 +206,9 @@ def update_account(account_id):
         cursor.execute(sql, update_values)
         db.commit()
         
+        # 记录操作日志
+        log_operation('阿里云账户', 'update', account_id, data.get('account_name'))
+        
         return jsonify({
             'code': 200,
             'message': '账户更新成功'
@@ -229,17 +236,23 @@ def delete_account(account_id):
     db = get_db()
     cursor = db.cursor()
     try:
-        # 检查账户是否存在
-        cursor.execute("SELECT id FROM aliyun_accounts WHERE id = %s", (account_id,))
-        if not cursor.fetchone():
+        # 获取账户名
+        cursor.execute("SELECT account_name FROM aliyun_accounts WHERE id = %s", (account_id,))
+        account = cursor.fetchone()
+        if not account:
             return jsonify({
                 'code': 404,
                 'message': '账户不存在'
             }), 404
         
+        account_name = account['account_name']
+        
         # 删除账户
         cursor.execute("DELETE FROM aliyun_accounts WHERE id = %s", (account_id,))
         db.commit()
+        
+        # 记录操作日志
+        log_operation('阿里云账户', 'delete', account_id, account_name)
         
         return jsonify({
             'code': 200,

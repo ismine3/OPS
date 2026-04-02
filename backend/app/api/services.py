@@ -4,6 +4,7 @@
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 
 services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 
@@ -95,17 +96,23 @@ def create_service():
     try:
         data = request.json
         cursor.execute(
-            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, public_ip, inner_ip, remark) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, remark) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
             (data.get('server_id'), data.get('category'), data.get('service_name'),
              data.get('version'), data.get('inner_port'), data.get('mapped_port'),
-             data.get('public_ip'), data.get('inner_ip'), data.get('remark'))
+             data.get('remark'))
         )
         db.commit()
+        service_id = cursor.lastrowid
+        
+        # 记录操作日志
+        log_operation('服务管理', 'create', service_id, data.get('service_name'), 
+                     {'category': data.get('category'), 'version': data.get('version')})
+        
         return jsonify({
             'code': 200,
             'message': '创建成功',
-            'data': {'id': cursor.lastrowid}
+            'data': {'id': service_id}
         })
     except Exception as e:
         db.rollback()
@@ -128,10 +135,15 @@ def update_service(service_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 获取更新前的服务名
+        cursor.execute("SELECT service_name FROM services WHERE id = %s", (service_id,))
+        old_service = cursor.fetchone()
+        service_name = old_service['service_name'] if old_service else None
+        
         data = request.json
         fields = []
         values = []
-        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'public_ip', 'inner_ip', 'remark']:
+        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'remark']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])
@@ -139,6 +151,10 @@ def update_service(service_id):
             values.append(service_id)
             cursor.execute(f"UPDATE services SET {', '.join(fields)} WHERE id = %s", values)
             db.commit()
+            
+            # 记录操作日志
+            log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name)
+            
         return jsonify({
             'code': 200,
             'message': '更新成功'
@@ -164,8 +180,17 @@ def delete_service(service_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 获取服务名
+        cursor.execute("SELECT service_name FROM services WHERE id = %s", (service_id,))
+        old_service = cursor.fetchone()
+        service_name = old_service['service_name'] if old_service else None
+        
         cursor.execute("DELETE FROM services WHERE id = %s", (service_id,))
         db.commit()
+        
+        # 记录操作日志
+        log_operation('服务管理', 'delete', service_id, service_name)
+        
         return jsonify({
             'code': 200,
             'message': '删除成功'

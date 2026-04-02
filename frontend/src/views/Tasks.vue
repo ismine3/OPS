@@ -139,6 +139,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled } from '@element-plus/icons-vue'
 import { getTasks, createTask, updateTask, deleteTask, toggleTask, runTask, getTaskLogs } from '../api/tasks'
+import { safeText, maxLength, cronValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -169,8 +170,19 @@ const form = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  cron_expression: [{ required: true, message: '请输入Cron表达式', trigger: 'blur' }]
+  name: [
+    { required: true, message: '请输入任务名称', trigger: 'blur' },
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(100), trigger: 'blur' }
+  ],
+  description: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
+  ],
+  cron_expression: [
+    { required: true, message: '请输入Cron表达式', trigger: 'blur' },
+    { validator: cronValidator, trigger: 'blur' }
+  ]
 }
 
 onMounted(() => {
@@ -188,6 +200,10 @@ async function fetchData() {
 }
 
 function handleSearch() {
+  if (!isSafeSearch(searchParams.search)) {
+    ElMessage.warning('搜索内容包含非法字符')
+    return
+  }
   fetchData()
 }
 

@@ -140,13 +140,13 @@ def create_server():
         data = request.json
         cursor.execute(
             "INSERT INTO servers (env_type, platform, hostname, inner_ip, mapped_ip, public_ip, "
-            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, docker_password, remark) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, docker_user, docker_password, remark) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('env_type'), data.get('platform'), data.get('hostname'),
              data.get('inner_ip'), data.get('mapped_ip'), data.get('public_ip'),
              data.get('cpu'), data.get('memory'), data.get('sys_disk'),
              data.get('data_disk'), data.get('purpose'), data.get('os_user'),
-             data.get('os_password'), data.get('docker_password'), data.get('remark'))
+             data.get('os_password'), data.get('docker_user', 'docker'), data.get('docker_password'), data.get('remark'))
         )
         db.commit()
         return jsonify({
@@ -180,7 +180,7 @@ def update_server(server_id):
         values = []
         for key in ['env_type', 'platform', 'hostname', 'inner_ip', 'mapped_ip', 'public_ip',
                      'cpu', 'memory', 'sys_disk', 'data_disk', 'purpose', 'os_user',
-                     'os_password', 'docker_password', 'remark']:
+                     'os_password', 'docker_user', 'docker_password', 'remark']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])

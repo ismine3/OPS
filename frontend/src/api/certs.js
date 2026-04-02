@@ -10,6 +10,13 @@ export function createCert(data) {
   return request.post('/certs', data)
 }
 
+// 上传证书文件并自动解析创建证书记录
+export function uploadAndCreateCert(formData) {
+  return request.post('/certs/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 // 更新证书
 export function updateCert(id, data) {
   return request.put(`/certs/${id}`, data)

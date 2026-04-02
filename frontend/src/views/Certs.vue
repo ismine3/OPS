@@ -24,6 +24,7 @@
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
         <el-form-item style="float: right;">
+          <el-button type="success" :icon="Upload" @click="handleUploadCreateDialog">上传证书</el-button>
           <el-button type="primary" :icon="Plus" @click="handleAdd">新增证书</el-button>
           <el-button type="success" :icon="Refresh" @click="handleBatchCheck" :loading="checkLoading">SSL检测</el-button>
           <el-button type="warning" :icon="Connection" @click="handleSyncDialog">阿里云同步</el-button>
@@ -229,21 +230,110 @@
       </template>
     </el-dialog>
 
+    <!-- 上传并创建证书弹窗 -->
+    <el-dialog v-model="uploadCreateDialogVisible" title="上传证书" width="550px" destroy-on-close>
+      <el-form ref="uploadCreateFormRef" :model="uploadCreateForm" :rules="uploadCreateRules" label-width="100px">
+        <el-form-item label="证书文件" prop="certFile">
+          <el-upload
+            ref="uploadCreateCertRef"
+            :auto-upload="false"
+            :limit="1"
+            accept=".pem,.crt,.cer"
+            :on-change="(file) => uploadCreateForm.certFile = file.raw"
+            :on-remove="() => uploadCreateForm.certFile = null"
+          >
+            <el-button type="primary" :icon="Upload">选择证书文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 .pem / .crt / .cer 格式，将自动解析域名、到期时间、颁发机构</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="私钥文件">
+          <el-upload
+            ref="uploadCreateKeyRef"
+            :auto-upload="false"
+            :limit="1"
+            accept=".pem,.key"
+            :on-change="(file) => uploadCreateForm.keyFile = file.raw"
+            :on-remove="() => uploadCreateForm.keyFile = null"
+          >
+            <el-button type="primary" :icon="Upload">选择私钥文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 .pem / .key 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="项目名称" prop="project_name">
+          <el-input v-model="uploadCreateForm.project_name" placeholder="请输入项目名称" />
+        </el-form-item>
+        <el-form-item label="品牌">
+          <el-input v-model="uploadCreateForm.brand" placeholder="如：DigiCert、GeoTrust（可选）" />
+        </el-form-item>
+        <el-form-item label="费用">
+          <el-input-number v-model="uploadCreateForm.cost" :min="0" :precision="2" style="width: 100%" placeholder="请输入费用（可选）" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="uploadCreateForm.remark" type="textarea" :rows="2" placeholder="请输入备注（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="uploadCreateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleUploadCreate" :loading="uploadCreateLoading">上传并创建</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 部署证书弹窗 -->
-    <el-dialog v-model="deployDialogVisible" title="部署证书到服务器" width="500px" destroy-on-close>
+    <el-dialog v-model="deployDialogVisible" title="部署证书到服务器" width="550px" destroy-on-close>
       <el-form :model="deployForm" label-width="100px">
         <el-form-item label="证书域名">
           <span>{{ deployTarget.domain }}</span>
         </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="环境类型">
+              <el-select v-model="deployFilter.env_type" placeholder="全部环境" clearable style="width: 100%" @change="handleDeployFilterChange">
+                <el-option label="测试" value="测试" />
+                <el-option label="生产" value="生产" />
+                <el-option label="智慧环保" value="智慧环保" />
+                <el-option label="水电集团" value="水电集团" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="平台">
+              <el-select v-model="deployFilter.platform" placeholder="全部平台" clearable style="width: 100%" @change="handleDeployFilterChange">
+                <el-option v-for="p in platformOptions" :key="p" :label="p" :value="p" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="目标服务器" required>
-          <el-select v-model="deployForm.server_id" placeholder="请选择服务器" style="width: 100%" filterable>
+          <el-select v-model="deployForm.server_id" placeholder="请选择服务器" style="width: 100%" filterable @change="handleServerChange">
             <el-option
-              v-for="server in serverList"
+              v-for="server in filteredServerList"
               :key="server.id"
               :label="`${server.hostname || ''} (${server.inner_ip || server.public_ip || ''})`"
               :value="server.id"
-            />
+            >
+              <div style="display: flex; justify-content: space-between;">
+                <span>{{ server.hostname || '' }} ({{ server.inner_ip || server.public_ip || '' }})</span>
+                <el-tag size="small" :type="getEnvTagType(server.env_type)" style="margin-left: 8px;">{{ server.env_type }}</el-tag>
+              </div>
+            </el-option>
           </el-select>
+        </el-form-item>
+        <el-form-item label="SSH用户" required>
+          <el-radio-group v-model="deployForm.ssh_user">
+            <el-radio value="root">
+              系统用户
+              <span v-if="selectedServer" class="ssh-user-info">({{ selectedServer.os_user || 'root' }})</span>
+            </el-radio>
+            <el-radio value="docker" :disabled="!selectedServer || !selectedServer.docker_user">
+              普通用户
+              <span v-if="selectedServer && selectedServer.docker_user" class="ssh-user-info">({{ selectedServer.docker_user }})</span>
+              <span v-else class="ssh-user-info text-muted">(未配置)</span>
+            </el-radio>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="远程目录" required>
           <el-input v-model="deployForm.remote_path" placeholder="如 /etc/nginx/ssl/" />
@@ -258,10 +348,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Bell, Upload, Download, Promotion } from '@element-plus/icons-vue'
-import { getCerts, createCert, updateCert, deleteCert, checkCert, checkCerts, syncAliyunCerts, notifyCerts, uploadCertFiles, downloadCertFiles, deleteCertFiles, deployCert } from '../api/certs'
+import { getCerts, createCert, updateCert, deleteCert, checkCert, checkCerts, syncAliyunCerts, notifyCerts, uploadCertFiles, downloadCertFiles, deleteCertFiles, deployCert, uploadAndCreateCert } from '../api/certs'
 import { getServers } from '../api/servers'
 
 const loading = ref(false)
@@ -310,15 +400,57 @@ const deployLoading = ref(false)
 const uploadTarget = reactive({ id: null, domain: '' })
 const deployTarget = reactive({ id: null, domain: '' })
 const uploadFiles = reactive({ certFile: null, keyFile: null })
-const deployForm = reactive({ server_id: null, remote_path: '' })
+const deployForm = reactive({ server_id: null, remote_path: '', ssh_user: 'root' })
+const deployFilter = reactive({ env_type: '', platform: '' })
 const serverList = ref([])
+const selectedServer = ref(null)
 const certUploadRef = ref(null)
 const keyUploadRef = ref(null)
+
+// 上传并创建证书相关
+const uploadCreateDialogVisible = ref(false)
+const uploadCreateLoading = ref(false)
+const uploadCreateFormRef = ref(null)
+const uploadCreateCertRef = ref(null)
+const uploadCreateKeyRef = ref(null)
+const uploadCreateForm = reactive({
+  certFile: null,
+  keyFile: null,
+  project_name: '',
+  brand: '',
+  cost: null,
+  remark: ''
+})
+const uploadCreateRules = {
+  certFile: [{ required: true, message: '请选择证书文件', trigger: 'change' }],
+  project_name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
+}
 
 const rules = {
   domain: [{ required: true, message: '请输入域名', trigger: 'blur' }],
   project_name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
 }
+
+// 平台选项（从服务器列表提取）
+const platformOptions = computed(() => {
+  const platforms = new Set()
+  serverList.value.forEach(s => {
+    if (s.platform) platforms.add(s.platform)
+  })
+  return Array.from(platforms).sort()
+})
+
+// 筛选后的服务器列表
+const filteredServerList = computed(() => {
+  let list = serverList.value
+  if (deployFilter.env_type) {
+    list = list.filter(s => s.env_type === deployFilter.env_type)
+  }
+  if (deployFilter.platform) {
+    list = list.filter(s => s.platform === deployFilter.platform)
+  }
+  return list
+})
 
 onMounted(() => {
   fetchData()
@@ -535,6 +667,10 @@ async function handleDeployDialog(row) {
   deployTarget.domain = row.domain
   deployForm.server_id = null
   deployForm.remote_path = ''
+  deployForm.ssh_user = 'root'
+  deployFilter.env_type = ''
+  deployFilter.platform = ''
+  selectedServer.value = null
   deployDialogVisible.value = true
   
   // 加载服务器列表
@@ -545,6 +681,20 @@ async function handleDeployDialog(row) {
     } catch (e) {
       ElMessage.error('获取服务器列表失败')
     }
+  }
+}
+
+function handleDeployFilterChange() {
+  // 筛选变化时清空已选服务器
+  deployForm.server_id = null
+  selectedServer.value = null
+}
+
+function handleServerChange(serverId) {
+  selectedServer.value = serverList.value.find(s => s.id === serverId) || null
+  // 如果服务器没有普通用户，自动选择系统用户
+  if (selectedServer.value && !selectedServer.value.docker_user) {
+    deployForm.ssh_user = 'root'
   }
 }
 
@@ -567,6 +717,60 @@ async function handleDeploy() {
     ElMessage.error(e.response?.data?.message || '部署失败')
   } finally {
     deployLoading.value = false
+  }
+}
+
+// 打开上传证书弹窗
+function handleUploadCreateDialog() {
+  Object.assign(uploadCreateForm, {
+    certFile: null,
+    keyFile: null,
+    project_name: '',
+    brand: '',
+    cost: null,
+    remark: ''
+  })
+  uploadCreateDialogVisible.value = true
+}
+
+// 上传证书并自动解析创建
+async function handleUploadCreate() {
+  // 手动验证
+  if (!uploadCreateForm.certFile) {
+    ElMessage.warning('请选择证书文件')
+    return
+  }
+  if (!uploadCreateForm.project_name) {
+    ElMessage.warning('请输入项目名称')
+    return
+  }
+  
+  uploadCreateLoading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('cert_file', uploadCreateForm.certFile)
+    if (uploadCreateForm.keyFile) {
+      formData.append('key_file', uploadCreateForm.keyFile)
+    }
+    formData.append('project_name', uploadCreateForm.project_name)
+    if (uploadCreateForm.brand) {
+      formData.append('brand', uploadCreateForm.brand)
+    }
+    if (uploadCreateForm.cost !== null && uploadCreateForm.cost !== undefined) {
+      formData.append('cost', uploadCreateForm.cost)
+    }
+    if (uploadCreateForm.remark) {
+      formData.append('remark', uploadCreateForm.remark)
+    }
+    
+    const res = await uploadAndCreateCert(formData)
+    ElMessage.success(`证书上传成功！域名: ${res.data.domain}, 剩余 ${res.data.remaining_days} 天`)
+    uploadCreateDialogVisible.value = false
+    fetchData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.message || '上传失败')
+  } finally {
+    uploadCreateLoading.value = false
   }
 }
 
@@ -604,6 +808,16 @@ function getCertTypeTag(type) {
   return map[type] || 'info'
 }
 
+function getEnvTagType(env) {
+  const map = {
+    '生产': 'danger',
+    '测试': 'warning',
+    '智慧环保': 'success',
+    '水电集团': 'primary'
+  }
+  return map[env] || 'info'
+}
+
 function getDaysTagType(days) {
   if (days <= 0) return 'danger'
   if (days < 30) return 'danger'
@@ -632,5 +846,15 @@ function getStatusTagType(status) {
 
 .table-card {
   margin-bottom: 0;
+}
+
+.ssh-user-info {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.text-muted {
+  color: #c0c4cc;
 }
 </style>

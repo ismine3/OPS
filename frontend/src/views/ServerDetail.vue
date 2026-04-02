@@ -37,11 +37,12 @@
         <el-descriptions-item label="系统盘">{{ server.sys_disk || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数据盘">{{ server.data_disk || '-' }}</el-descriptions-item>
         <el-descriptions-item label="用途" :span="2">{{ server.purpose || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="系统用户">{{ server.os_user || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="系统用户">{{ server.os_user || 'root' }}</el-descriptions-item>
         <el-descriptions-item label="系统密码">
           <PasswordDisplay :password="server.os_password" />
         </el-descriptions-item>
-        <el-descriptions-item label="Docker密码" :span="2">
+        <el-descriptions-item label="普通用户">{{ server.docker_user || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="普通用户密码">
           <PasswordDisplay :password="server.docker_password" />
         </el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ server.remark || '-' }}</el-descriptions-item>

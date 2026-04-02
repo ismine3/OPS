@@ -149,9 +149,18 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="Docker密码" prop="docker_password">
-          <el-input v-model="form.docker_password" type="password" show-password placeholder="请输入Docker密码" />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="普通用户" prop="docker_user">
+              <el-input v-model="form.docker_user" placeholder="如：docker（可选）" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="普通用户密码" prop="docker_password">
+              <el-input v-model="form.docker_password" type="password" show-password placeholder="普通用户密码（可选）" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
         </el-form-item>
@@ -205,6 +214,7 @@ const form = reactive({
   purpose: '',
   os_user: '',
   os_password: '',
+  docker_user: '',
   docker_password: '',
   remark: ''
 })

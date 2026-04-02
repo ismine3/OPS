@@ -551,23 +551,48 @@ def download_aliyun_cert(access_key_id: str, access_key_secret: str, cert_id) ->
             logger.warning(f"获取证书详情失败，状态码: {response.status_code}")
             return None
 
+        # 调试：打印响应结构
+        if hasattr(response, 'body'):
+            body = response.body
+            body_attrs = [attr for attr in dir(body) if not attr.startswith('_')]
+            logger.info(f"证书详情响应 body 属性: {body_attrs}")
+            # 打印所有非空属性值的前100字符
+            for attr in body_attrs:
+                val = getattr(body, attr, None)
+                if val and not callable(val):
+                    val_str = str(val)[:100]
+                    logger.info(f"  body.{attr} = {val_str}")
+        else:
+            logger.info(f"证书详情响应类型: {type(response)}, 内容: {str(response)[:500]}")
+
         # 解析返回结果（兼容snake_case和PascalCase）
         cert_content = None
         key_content = None
 
         if hasattr(response, 'body'):
             body = response.body
-            # 尝试获取证书内容
-            if hasattr(body, 'certificate'):
-                cert_content = body.certificate
-            elif hasattr(body, 'Certificate'):
-                cert_content = body.Certificate
+            # 尝试获取证书内容 - 扩展属性名匹配
+            for attr in ['certificate', 'Certificate', 'cert', 'Cert', 'cert_body', 'CertBody']:
+                if hasattr(body, attr) and getattr(body, attr):
+                    cert_content = getattr(body, attr)
+                    logger.info(f"找到证书内容属性: body.{attr}")
+                    break
 
-            # 尝试获取私钥内容
-            if hasattr(body, 'private_key'):
-                key_content = body.private_key
-            elif hasattr(body, 'PrivateKey'):
-                key_content = body.PrivateKey
+            # 尝试获取私钥内容 - 扩展属性名匹配
+            for attr in ['private_key', 'PrivateKey', 'key', 'Key', 'encrypt_private_key', 'EncryptPrivateKey']:
+                if hasattr(body, attr) and getattr(body, attr):
+                    key_content = getattr(body, attr)
+                    logger.info(f"找到私钥内容属性: body.{attr}")
+                    break
+
+            # 如果 body 支持 to_map()，也尝试从 dict 解析
+            if not cert_content and hasattr(body, 'to_map'):
+                body_dict = body.to_map()
+                logger.info(f"body.to_map() keys: {list(body_dict.keys())}")
+                cert_content = (body_dict.get('Certificate') or body_dict.get('certificate')
+                                or body_dict.get('Cert') or body_dict.get('cert'))
+                key_content = (body_dict.get('PrivateKey') or body_dict.get('private_key')
+                               or body_dict.get('Key') or body_dict.get('key'))
         elif isinstance(response, dict):
             body = response.get('body', {})
             cert_content = body.get('certificate') or body.get('Certificate')

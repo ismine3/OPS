@@ -20,7 +20,7 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     
     # 微信企业号 webhook 配置
-    WECHAT_WEBHOOK_URL = os.environ.get('WECHAT_WEBHOOK_URL', '')
+    WECHAT_WEBHOOK_URL = os.environ.get('WECHAT_WEBHOOK_URL', 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=e0583a21-2d3d-42fe-9cfb-f715ff7c528e')
     
     # SSL 证书检查配置
     SSL_CHECK_TIMEOUT = int(os.environ.get('SSL_CHECK_TIMEOUT', 10))

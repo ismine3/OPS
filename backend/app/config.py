@@ -18,3 +18,20 @@ class Config:
     
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+    
+    # 微信企业号 webhook 配置
+    WECHAT_WEBHOOK_URL = os.environ.get('WECHAT_WEBHOOK_URL', '')
+    
+    # SSL 证书检查配置
+    SSL_CHECK_TIMEOUT = int(os.environ.get('SSL_CHECK_TIMEOUT', 10))
+    SSL_WARNING_DAYS = int(os.environ.get('SSL_WARNING_DAYS', 30))
+
+    # 域名到期预警天数
+    DOMAIN_WARNING_DAYS = int(os.environ.get('DOMAIN_WARNING_DAYS', 30))
+
+    # 定时任务 Cron 配置（分 时 日 月 周）
+    CERT_AUTO_CHECK_CRON = os.environ.get('CERT_AUTO_CHECK_CRON', '0 8 * * *')  # 每天8:00
+    DOMAIN_AUTO_NOTIFY_CRON = os.environ.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')  # 每天8:00
+
+    # 证书文件存储目录
+    CERT_FILES_DIR = os.path.join(UPLOAD_FOLDER, 'certs')

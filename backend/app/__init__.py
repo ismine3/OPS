@@ -47,6 +47,8 @@ def register_blueprints(app):
     from .api.records import records_bp
     from .api.dashboard import dashboard_bp
     from .api.dicts import dicts_bp
+    from .api.aliyun_accounts import aliyun_accounts_bp
+    from .api.domains import domains_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
@@ -59,3 +61,5 @@ def register_blueprints(app):
     app.register_blueprint(records_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(dicts_bp)
+    app.register_blueprint(aliyun_accounts_bp)
+    app.register_blueprint(domains_bp)

@@ -30,11 +30,20 @@
         </div>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" class="stat-col">
-        <div class="stat-card red-gradient" @click="$router.push('/certs')">
+        <div class="stat-card red-gradient" @click="$router.push('/domains')">
+          <el-icon :size="40" class="stat-icon"><Link /></el-icon>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats.counts?.domains || 0 }}</div>
+            <div class="stat-label">域名</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="8" class="stat-col">
+        <div class="stat-card orange-gradient" @click="$router.push('/certs')">
           <el-icon :size="40" class="stat-icon"><Document /></el-icon>
           <div class="stat-info">
             <div class="stat-value">{{ stats.counts?.certs || 0 }}</div>
-            <div class="stat-label">域名证书</div>
+            <div class="stat-label">SSL证书</div>
           </div>
         </div>
       </el-col>
@@ -89,9 +98,13 @@
             </div>
           </template>
           <el-table :data="stats.recent_certs || []" stripe v-loading="loading" max-height="300">
-            <el-table-column prop="project" label="项目" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="entity" label="主体" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="expire_date" label="到期日期" min-width="100" />
+            <el-table-column prop="domain" label="域名" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="project_name" label="项目" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="cert_expire_time" label="到期时间" min-width="120">
+              <template #default="{ row }">
+                {{ row.cert_expire_time ? row.cert_expire_time.substring(0, 10) : '-' }}
+              </template>
+            </el-table-column>
             <el-table-column prop="remaining_days" label="剩余天数" min-width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="getDaysTagType(row.remaining_days)" size="small">
@@ -128,7 +141,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Monitor, SetUp, Grid, Document, Notebook, Timer } from '@element-plus/icons-vue'
+import { Monitor, SetUp, Grid, Document, Notebook, Timer, Link } from '@element-plus/icons-vue'
 import { getDashboardStats } from '../api/dashboard'
 
 const loading = ref(false)
@@ -202,7 +215,7 @@ function getDaysTagType(days) {
 
 .stat-col {
   flex: 1 1 0;
-  max-width: 20%;
+  max-width: 16.666%;
 }
 
 .stat-card {

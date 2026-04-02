@@ -18,7 +18,9 @@ const routes = [
       { path: 'services', name: 'Services', component: () => import('../views/Services.vue'), meta: { title: '服务管理' } },
 
       { path: 'apps', name: 'Apps', component: () => import('../views/Apps.vue'), meta: { title: '应用系统' } },
-      { path: 'certs', name: 'Certs', component: () => import('../views/Certs.vue'), meta: { title: '域名/证书' } },
+      { path: 'domains', name: 'Domains', component: () => import('../views/Domains.vue'), meta: { title: '域名管理' } },
+      { path: 'certs', name: 'Certs', component: () => import('../views/Certs.vue'), meta: { title: '证书管理' } },
+      { path: 'aliyun-accounts', name: 'AliyunAccounts', component: () => import('../views/AliyunAccounts.vue'), meta: { title: '阿里云账户', requiresAdmin: true } },
       { path: 'records', name: 'Records', component: () => import('../views/Records.vue'), meta: { title: '更新记录' } },
       { path: 'tasks', name: 'Tasks', component: () => import('../views/Tasks.vue'), meta: { title: '定时任务' } },
       { path: 'users', name: 'Users', component: () => import('../views/Users.vue'), meta: { title: '用户管理', requiresAdmin: true } },

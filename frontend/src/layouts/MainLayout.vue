@@ -31,9 +31,13 @@
           <el-icon><Grid /></el-icon>
           <template #title>应用系统</template>
         </el-menu-item>
+        <el-menu-item index="/domains">
+          <el-icon><Link /></el-icon>
+          <template #title>域名管理</template>
+        </el-menu-item>
         <el-menu-item index="/certs">
           <el-icon><Document /></el-icon>
-          <template #title>域名/证书</template>
+          <template #title>证书管理</template>
         </el-menu-item>
         <el-menu-item index="/records">
           <el-icon><Notebook /></el-icon>
@@ -42,6 +46,10 @@
         <el-menu-item index="/tasks">
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
+        </el-menu-item>
+        <el-menu-item v-if="userStore.isAdmin" index="/aliyun-accounts">
+          <el-icon><Key /></el-icon>
+          <template #title>阿里云账户</template>
         </el-menu-item>
         <el-menu-item v-if="userStore.isAdmin" index="/users">
           <el-icon><UserFilled /></el-icon>
@@ -99,7 +107,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, UserFilled } from '@element-plus/icons-vue'
+import { Download, UserFilled, Link, Key } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { exportExcel } from '../api/export'
 

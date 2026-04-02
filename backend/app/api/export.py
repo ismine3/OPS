@@ -194,14 +194,14 @@ def export_excel():
                 for key, val in cell_style.items():
                     setattr(cell, key, val)
         
-        # ==================== Sheet 4: 域名证书 ====================
-        ws4 = wb.create_sheet('域名证书')
-        headers4 = ['序号', '编号', '分类', '项目', '主体', '购买日期', '到期日期', 
-                    '费用(元)', '剩余天数', '品牌', '状态', '备注']
+        # ==================== Sheet 4: 域名管理 ====================
+        ws4 = wb.create_sheet('域名管理')
+        headers4 = ['序号', '域名', '注册商', '注册日期', '到期日期', '持有者', 
+                    'DNS服务器', '状态', '来源', '费用', '备注']
         
         with db.cursor() as cursor:
-            cursor.execute('SELECT * FROM domains_certs ORDER BY id')
-            certs = cursor.fetchall()
+            cursor.execute('SELECT * FROM domains ORDER BY id')
+            domains = cursor.fetchall()
         
         # 写入表头
         for col_idx, header in enumerate(headers4, 1):
@@ -211,20 +211,19 @@ def export_excel():
         
         # 写入数据
         data_rows4 = []
-        for idx, cert in enumerate(certs, 1):
+        for idx, domain in enumerate(domains, 1):
             row_data = [
                 idx,
-                safe_value(cert.get('seq_no')),
-                safe_value(cert.get('category')),
-                safe_value(cert.get('project')),
-                safe_value(cert.get('entity')),
-                safe_value(cert.get('purchase_date')),
-                safe_value(cert.get('expire_date')),
-                safe_value(cert.get('cost')),
-                safe_value(cert.get('remaining_days')),
-                safe_value(cert.get('brand')),
-                safe_value(cert.get('status')),
-                safe_value(cert.get('remark'))
+                safe_value(domain.get('domain_name')),
+                safe_value(domain.get('registrar')),
+                safe_value(domain.get('registration_date')),
+                safe_value(domain.get('expire_date')),
+                safe_value(domain.get('owner')),
+                safe_value(domain.get('dns_servers')),
+                safe_value(domain.get('status')),
+                safe_value(domain.get('source')),
+                safe_value(domain.get('cost')),
+                safe_value(domain.get('remark'))
             ]
             data_rows4.append(row_data)
             for col_idx, value in enumerate(row_data, 1):
@@ -232,8 +231,49 @@ def export_excel():
                 for key, val in cell_style.items():
                     setattr(cell, key, val)
         
+        # ==================== Sheet 5: 证书管理 ====================
+        ws5 = wb.create_sheet('证书管理')
+        headers5 = ['序号', '域名', '项目', '类型', '颁发机构', '到期时间', 
+                    '剩余天数', '品牌', '费用', '状态', '备注']
+        
+        with db.cursor() as cursor:
+            cursor.execute('SELECT * FROM ssl_certificates ORDER BY id')
+            certs = cursor.fetchall()
+        
+        # 写入表头
+        for col_idx, header in enumerate(headers5, 1):
+            cell = ws5.cell(row=1, column=col_idx, value=header)
+            for key, value in header_style.items():
+                setattr(cell, key, value)
+        
+        # 写入数据
+        data_rows5 = []
+        for idx, cert in enumerate(certs, 1):
+            # 证书类型映射
+            cert_type_map = {0: '自动检测', 1: '手动录入', 2: '阿里云证书'}
+            cert_type = cert_type_map.get(cert.get('cert_type'), '未知')
+            
+            row_data = [
+                idx,
+                safe_value(cert.get('domain')),
+                safe_value(cert.get('project_name')),
+                cert_type,
+                safe_value(cert.get('issuer')),
+                safe_value(cert.get('cert_expire_time')),
+                safe_value(cert.get('remaining_days')),
+                safe_value(cert.get('brand')),
+                safe_value(cert.get('cost')),
+                safe_value(cert.get('status')),
+                safe_value(cert.get('remark'))
+            ]
+            data_rows5.append(row_data)
+            for col_idx, value in enumerate(row_data, 1):
+                cell = ws5.cell(row=idx + 1, column=col_idx, value=value)
+                for key, val in cell_style.items():
+                    setattr(cell, key, val)
+        
         # 设置列宽（简化处理，使用固定列宽）
-        for ws, headers in [(ws1, headers1), (ws2, headers2), (ws3, headers3), (ws4, headers4)]:
+        for ws, headers in [(ws1, headers1), (ws2, headers2), (ws3, headers3), (ws4, headers4), (ws5, headers5)]:
             for col_idx, header in enumerate(headers, 1):
                 col_letter = chr(64 + col_idx) if col_idx <= 26 else chr(64 + col_idx // 26) + chr(64 + col_idx % 26 or 26)
                 if col_idx > 26:

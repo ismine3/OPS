@@ -17,6 +17,16 @@ def serialize_record(record):
     return record
 
 
+def serialize_datetime(record):
+    """将记录中的所有datetime对象转换为字符串"""
+    if not record:
+        return record
+    for key, value in record.items():
+        if isinstance(value, datetime):
+            record[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+    return record
+
+
 @dashboard_bp.route('/stats', methods=['GET'])
 @jwt_required
 def get_stats():
@@ -36,8 +46,11 @@ def get_stats():
         cursor.execute("SELECT COUNT(*) as cnt FROM app_systems")
         app_count = cursor.fetchone()['cnt']
 
-        cursor.execute("SELECT COUNT(*) as cnt FROM domains_certs")
-        cert_count = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM domains")
+        domains_count = cursor.fetchone()['cnt']
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM ssl_certificates")
+        certs_count = cursor.fetchone()['cnt']
 
         cursor.execute("SELECT COUNT(*) as cnt FROM change_records")
         record_count = cursor.fetchone()['cnt']
@@ -55,20 +68,17 @@ def get_stats():
         recent_records = cursor.fetchall()
         recent_records = [serialize_record(r) for r in recent_records]
 
-        # 域名证书到期提醒（按到期日期升序，动态计算剩余天数）
+        # SSL证书到期提醒（按到期日期升序，动态计算剩余天数）
         cursor.execute(
-            "SELECT *, DATEDIFF(expire_date, CURDATE()) as calc_remaining_days "
-            "FROM domains_certs WHERE expire_date IS NOT NULL AND expire_date != '' "
-            "ORDER BY expire_date ASC LIMIT 10"
+            "SELECT *, DATEDIFF(cert_expire_time, NOW()) as calc_remaining_days "
+            "FROM ssl_certificates WHERE cert_expire_time IS NOT NULL "
+            "ORDER BY cert_expire_time ASC LIMIT 10"
         )
         recent_certs = cursor.fetchall()
         for cert in recent_certs:
             if cert.get('calc_remaining_days') is not None:
                 cert['remaining_days'] = cert.pop('calc_remaining_days')
-            if cert.get('expire_date') and isinstance(cert['expire_date'], datetime):
-                cert['expire_date'] = cert['expire_date'].strftime('%Y-%m-%d')
-            if cert.get('purchase_date') and isinstance(cert['purchase_date'], datetime):
-                cert['purchase_date'] = cert['purchase_date'].strftime('%Y-%m-%d')
+            cert = serialize_datetime(cert)
 
         return jsonify({
             'code': 200,
@@ -77,7 +87,8 @@ def get_stats():
                     'servers': server_count,
                     'services': service_count,
                     'apps': app_count,
-                    'certs': cert_count,
+                    'domains': domains_count,
+                    'certs': certs_count,
                     'records': record_count
                 },
                 'env_distribution': env_distribution,

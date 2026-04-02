@@ -143,27 +143,7 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用系统台账表';
     """)
 
-    # 6. 域名与证书表
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS `domains_certs` (
-        `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `seq_no` VARCHAR(20) COMMENT '序号',
-        `category` VARCHAR(100) COMMENT '类别(公众平台/域名/ssl证书)',
-        `project` VARCHAR(200) COMMENT '项目/子类',
-        `entity` VARCHAR(200) COMMENT '主体',
-        `purchase_date` DATE COMMENT '购买时间',
-        `expire_date` VARCHAR(100) COMMENT '到期时间',
-        `cost` DECIMAL(10,2) COMMENT '费用(元)',
-        `remaining_days` VARCHAR(50) COMMENT '截止有效期(天)',
-        `brand` VARCHAR(100) COMMENT '品牌',
-        `status` VARCHAR(50) COMMENT '备注/状态',
-        `remark` TEXT COMMENT '备注',
-        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX `idx_category` (`category`),
-        INDEX `idx_status` (`status`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='域名与证书表';
-    """)
+
 
     # 7. 更新记录表
     cursor.execute("""
@@ -248,6 +228,76 @@ def init_database():
     cursor.execute("""
     INSERT IGNORE INTO `dict_service_categories` (`name`, `sort_order`) VALUES
     ('中间件', 1), ('数据库', 2), ('缓存', 3), ('消息队列', 4), ('应用服务', 5), ('数据服务', 6)
+    """)
+
+    # 12. 阿里云账户配置表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `aliyun_accounts` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `account_name` VARCHAR(100) NOT NULL UNIQUE COMMENT '账户名称',
+        `access_key_id` VARCHAR(100) NOT NULL COMMENT 'AccessKey ID',
+        `access_key_secret` VARCHAR(255) NOT NULL COMMENT 'AccessKey Secret',
+        `is_active` TINYINT DEFAULT 1 COMMENT '是否启用 0:禁用 1:启用',
+        `description` VARCHAR(255) COMMENT '账户描述',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_account_name` (`account_name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='阿里云账户配置表';
+    """)
+
+    # 13. 域名管理表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `domains` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `domain_name` VARCHAR(255) NOT NULL UNIQUE COMMENT '域名',
+        `registrar` VARCHAR(200) COMMENT '注册商',
+        `registration_date` DATE COMMENT '注册日期',
+        `expire_date` DATE COMMENT '到期日期',
+        `owner` VARCHAR(200) COMMENT '持有者',
+        `dns_servers` VARCHAR(500) COMMENT 'DNS服务器',
+        `status` VARCHAR(50) DEFAULT '正常' COMMENT '状态',
+        `source` VARCHAR(20) DEFAULT 'manual' COMMENT '来源 manual/aliyun',
+        `aliyun_account_id` INT COMMENT '来源阿里云账户ID',
+        `cost` DECIMAL(10,2) COMMENT '费用',
+        `remark` TEXT COMMENT '备注',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_domain_name` (`domain_name`),
+        INDEX `idx_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='域名管理表';
+    """)
+
+    # 14. SSL证书管理表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `ssl_certificates` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `domain` VARCHAR(255) NOT NULL COMMENT '域名',
+        `project_name` VARCHAR(200) COMMENT '所属项目',
+        `cert_type` TINYINT DEFAULT 0 COMMENT '证书类型 0:自动检测 1:手动录入 2:阿里云证书',
+        `issuer` VARCHAR(200) COMMENT '颁发机构',
+        `cert_generate_time` DATETIME COMMENT '证书生成时间',
+        `cert_valid_days` INT COMMENT '有效期天数',
+        `cert_expire_time` DATETIME COMMENT '证书到期时间',
+        `remaining_days` INT COMMENT '剩余天数',
+        `brand` VARCHAR(100) COMMENT '品牌',
+        `cost` DECIMAL(10,2) COMMENT '费用',
+        `status` VARCHAR(50) DEFAULT '正常' COMMENT '状态',
+        `last_check_time` DATETIME COMMENT '最后检测时间',
+        `last_notify_time` DATETIME COMMENT '最后通知时间',
+        `notify_status` TINYINT DEFAULT 0 COMMENT '通知状态 0:未通知 1:已通知',
+        `source` VARCHAR(20) DEFAULT 'manual' COMMENT '来源 manual/auto/aliyun',
+        `aliyun_account_id` INT COMMENT '关联阿里云账户ID',
+        `remark` TEXT COMMENT '备注',
+        `cert_file_path` VARCHAR(500) COMMENT '证书文件存储路径',
+        `key_file_path` VARCHAR(500) COMMENT '私钥文件存储路径',
+        `has_cert_file` TINYINT DEFAULT 0 COMMENT '是否有证书文件 0:无 1:有',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_domain` (`domain`),
+        INDEX `idx_cert_type` (`cert_type`),
+        INDEX `idx_expire_time` (`cert_expire_time`),
+        INDEX `idx_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSL证书管理表';
     """)
 
     conn.commit()

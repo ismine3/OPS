@@ -557,6 +557,8 @@ def sync_aliyun_certs():
         synced_count = 0
         skipped_count = 0
         updated_count = 0
+        downloaded_count = 0
+        download_failed_count = 0
         
         for cert_info in aliyun_certs:
             domain = cert_info['domain']
@@ -629,7 +631,11 @@ def sync_aliyun_certs():
                                     SET cert_file_path = %s, key_file_path = %s, has_cert_file = 1
                                     WHERE id = %s
                                 """, (cert_path, key_path, db_cert_id))
+                                downloaded_count += 1
+                            else:
+                                download_failed_count += 1
                         except Exception as e:
+                            download_failed_count += 1
                             logger.warning(f"下载阿里云证书文件失败: {domain} - {e}")
                 else:
                     skipped_count += 1
@@ -690,7 +696,11 @@ def sync_aliyun_certs():
                             SET cert_file_path = %s, key_file_path = %s, has_cert_file = 1
                             WHERE id = %s
                         """, (cert_path, key_path, db_cert_id))
+                        downloaded_count += 1
+                    else:
+                        download_failed_count += 1
                 except Exception as e:
+                    download_failed_count += 1
                     logger.warning(f"下载阿里云证书文件失败: {domain} - {e}")
         
         db.commit()
@@ -702,6 +712,8 @@ def sync_aliyun_certs():
                 'synced': synced_count,
                 'updated': updated_count,
                 'skipped': skipped_count,
+                'downloaded': downloaded_count,
+                'download_failed': download_failed_count,
                 'total': len(aliyun_certs)
             }
         })

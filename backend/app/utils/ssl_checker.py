@@ -236,19 +236,25 @@ def scan_aliyun_certs(access_key_id: str, access_key_secret: str, account_name: 
                     not_after_timestamp = getattr(cert_info, 'not_after', None)
                     not_before_timestamp = getattr(cert_info, 'not_before', None)
                     issuer = getattr(cert_info, 'issuer', 'Unknown')
-                    cert_id = getattr(cert_info, 'certificate_id', '')
+                    cert_id = (getattr(cert_info, 'certificate_id', None)
+                               or getattr(cert_info, 'cert_id', None)
+                               or getattr(cert_info, 'id', None) or '')
                 elif hasattr(cert_info, 'CommonName'):
                     domain = getattr(cert_info, 'CommonName', 'unknown')
                     not_after_timestamp = getattr(cert_info, 'NotAfter', None)
                     not_before_timestamp = getattr(cert_info, 'NotBefore', None)
                     issuer = getattr(cert_info, 'Issuer', 'Unknown')
-                    cert_id = getattr(cert_info, 'CertificateId', '')
+                    cert_id = (getattr(cert_info, 'CertificateId', None)
+                               or getattr(cert_info, 'CertId', None)
+                               or getattr(cert_info, 'Id', None) or '')
                 else:
                     domain = cert_info.get('common_name', cert_info.get('CommonName', 'unknown'))
                     not_after_timestamp = cert_info.get('not_after', cert_info.get('NotAfter'))
                     not_before_timestamp = cert_info.get('not_before', cert_info.get('NotBefore'))
                     issuer = cert_info.get('issuer', cert_info.get('Issuer', 'Unknown'))
-                    cert_id = cert_info.get('certificate_id', cert_info.get('CertificateId', ''))
+                    cert_id = (cert_info.get('certificate_id') or cert_info.get('CertificateId')
+                               or cert_info.get('cert_id') or cert_info.get('CertId')
+                               or cert_info.get('id') or cert_info.get('Id') or '')
                 
                 if not not_after_timestamp or not not_before_timestamp:
                     logger.warning(f"证书缺少有效期信息: {domain}")
@@ -282,7 +288,7 @@ def scan_aliyun_certs(access_key_id: str, access_key_secret: str, account_name: 
                 }
                 
                 certs.append(cert_data)
-                logger.info(f"发现阿里云证书: {domain} (账号: {account_name}, ID: {cert_id})")
+                logger.info(f"发现阿里云证书: {domain} (账号: {account_name}, ID: {cert_id}, 类型: {type(cert_id).__name__})")
                 
             except Exception as e:
                 logger.error(f"处理账号 {account_name} 的证书失败: {type(e).__name__}: {str(e)}")
@@ -507,6 +513,8 @@ def download_aliyun_cert(access_key_id: str, access_key_secret: str, cert_id) ->
         logger.error("下载证书参数不完整")
         return None
 
+    logger.info(f"开始下载阿里云证书: cert_id={cert_id}")
+
     try:
         # 创建阿里云客户端配置
         config = open_api_models.Config(
@@ -516,10 +524,19 @@ def download_aliyun_cert(access_key_id: str, access_key_secret: str, cert_id) ->
         config.endpoint = 'cas.aliyuncs.com'
         client = CasClient(config)
 
-        # 构建请求
-        detail_request = cas_models.GetUserCertificateDetailRequest(
-            certificate_id=cert_id
-        )
+        # 构建请求（兼容不同 SDK 版本的参数名）
+        try:
+            detail_request = cas_models.GetUserCertificateDetailRequest(
+                cert_id=int(cert_id)
+            )
+        except (TypeError, ValueError):
+            try:
+                detail_request = cas_models.GetUserCertificateDetailRequest(
+                    certificate_id=int(cert_id)
+                )
+            except (TypeError, ValueError):
+                logger.error(f"无法构建证书详情请求: cert_id={cert_id}")
+                return None
         runtime = util_models.RuntimeOptions()
 
         # 调用API

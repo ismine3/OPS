@@ -39,10 +39,6 @@
           <el-icon><Document /></el-icon>
           <template #title>证书管理</template>
         </el-menu-item>
-        <el-menu-item index="/records">
-          <el-icon><Notebook /></el-icon>
-          <template #title>更新记录</template>
-        </el-menu-item>
         <el-menu-item index="/tasks">
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
@@ -54,6 +50,14 @@
         <el-menu-item v-if="userStore.isAdmin" index="/users">
           <el-icon><UserFilled /></el-icon>
           <template #title>用户管理</template>
+        </el-menu-item>
+        <el-menu-item index="/operation-logs">
+          <el-icon><List /></el-icon>
+          <template #title>操作日志</template>
+        </el-menu-item>
+        <el-menu-item index="/records">
+          <el-icon><Notebook /></el-icon>
+          <template #title>更新记录</template>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -107,7 +111,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, UserFilled, Link, Key } from '@element-plus/icons-vue'
+import { Download, UserFilled, Link, Key, List } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { exportExcel } from '../api/export'
 

@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify, current_app, send_file
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.ssl_checker import get_ssl_cert_info, scan_aliyun_certs, send_wechat_notification
+from ..utils.operation_log import log_operation
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
@@ -264,11 +265,14 @@ def create_cert():
             cost, status, 'manual', remark
         ))
         db.commit()
-        
+        cert_id = cursor.lastrowid
+        # 记录操作日志
+        log_operation(module='证书管理', action='create', target_id=cert_id, target_name=domain,
+                     detail={'project_name': project_name, 'cert_type': '手动录入'})
         return jsonify({
             'code': 200,
             'message': '创建成功',
-            'data': {'id': cursor.lastrowid}
+            'data': {'id': cert_id}
         })
     except Exception as e:
         db.rollback()
@@ -378,7 +382,11 @@ def upload_and_create_cert():
             WHERE id = %s
         """, (cert_path, key_path, cert_id))
         db.commit()
-        
+    
+        # 记录操作日志
+        log_operation(module='证书管理', action='upload', target_id=cert_id, target_name=domain,
+                     detail={'issuer': issuer, 'valid_days': cert_valid_days, 'remaining_days': remaining_days})
+    
         return jsonify({
             'code': 200,
             'message': '上传成功',
@@ -488,11 +496,19 @@ def delete_cert(cert_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 先获取证书信息用于日志
+        cursor.execute("SELECT domain FROM ssl_certificates WHERE id = %s", (cert_id,))
+        cert = cursor.fetchone()
+        domain = cert['domain'] if cert else str(cert_id)
+        
         cursor.execute("DELETE FROM ssl_certificates WHERE id = %s", (cert_id,))
         db.commit()
         
         if cursor.rowcount == 0:
             return jsonify({'code': 404, 'message': '证书不存在'}), 404
+        
+        # 记录操作日志
+        log_operation(module='证书管理', action='delete', target_id=cert_id, target_name=domain)
         
         return jsonify({
             'code': 200,
@@ -1293,6 +1309,10 @@ def deploy_cert(cert_id):
                 sftp.put(cert['key_file_path'], remote_key_path)
 
             sftp.close()
+
+            # 记录操作日志
+            log_operation(module='证书管理', action='deploy', target_id=cert_id, target_name=cert['domain'],
+                         detail={'ssh_user': ssh_username, 'remote_path': remote_path, 'server_ip': server['inner_ip']})
 
             return jsonify({
                 'code': 200,

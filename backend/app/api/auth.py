@@ -7,6 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ..models.user import get_user_by_username, update_password
 from ..utils.auth import generate_token
 from ..utils.decorators import jwt_required
+from ..utils.operation_log import log_operation
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -41,6 +42,8 @@ def login():
     user = get_user_by_username(username)
     
     if not user:
+        # 记录登录失败
+        log_operation(module='用户认证', action='login_failed', target_name=username, detail={'reason': '用户不存在'})
         return jsonify({
             'code': 401,
             'message': '用户名或密码错误'
@@ -48,6 +51,7 @@ def login():
     
     # 检查用户是否激活
     if not user.get('is_active'):
+        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '用户已禁用'})
         return jsonify({
             'code': 401,
             'message': '用户已被禁用'
@@ -55,10 +59,14 @@ def login():
     
     # 验证密码
     if not check_password_hash(user['password_hash'], password):
+        log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '密码错误'})
         return jsonify({
             'code': 401,
             'message': '用户名或密码错误'
         }), 401
+    
+    # 记录登录成功
+    log_operation(module='用户认证', action='login', target_id=user['id'], target_name=username)
     
     # 生成 token
     token = generate_token(

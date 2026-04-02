@@ -206,6 +206,27 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行日志表';
     """)
 
+    # 10. 操作日志表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `operation_logs` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `user_id` INT COMMENT '操作用户ID',
+        `username` VARCHAR(100) COMMENT '操作用户名',
+        `module` VARCHAR(100) NOT NULL COMMENT '操作模块: 服务器/服务/应用/域名/证书/用户等',
+        `action` VARCHAR(50) NOT NULL COMMENT '操作类型: create/update/delete/login等',
+        `target_id` INT COMMENT '操作对象ID',
+        `target_name` VARCHAR(300) COMMENT '操作对象名称',
+        `detail` TEXT COMMENT '操作详情(JSON)',
+        `ip` VARCHAR(50) COMMENT '操作IP',
+        `user_agent` VARCHAR(500) COMMENT '浏览器User-Agent',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_user_id` (`user_id`),
+        INDEX `idx_module` (`module`),
+        INDEX `idx_action` (`action`),
+        INDEX `idx_created_at` (`created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
+    """)
+
     # 插入默认管理员账户
     admin_password_hash = generate_password_hash('admin123')
     cursor.execute("""

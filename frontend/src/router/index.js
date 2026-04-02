@@ -25,6 +25,7 @@ const routes = [
       { path: 'tasks', name: 'Tasks', component: () => import('../views/Tasks.vue'), meta: { title: '定时任务' } },
       { path: 'users', name: 'Users', component: () => import('../views/Users.vue'), meta: { title: '用户管理', requiresAdmin: true } },
       { path: 'change-password', name: 'ChangePassword', component: () => import('../views/ChangePassword.vue'), meta: { title: '修改密码' } },
+      { path: 'operation-logs', name: 'OperationLogs', component: () => import('../views/OperationLogs.vue'), meta: { title: '操作日志' } },
     ]
   }
 ]

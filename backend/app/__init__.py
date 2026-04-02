@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from .config import Config
 
@@ -31,6 +31,23 @@ def create_app():
     from .utils.scheduler import init_scheduler
     init_scheduler(app)
     
+    # 在每个请求前解析 JWT token，设置用户信息到 g 对象
+    @app.before_request
+    def load_user_from_token():
+        # 跳过登录相关接口
+        if request.endpoint and 'auth' in request.endpoint:
+            return
+        
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+            from .utils.auth import verify_token
+            payload = verify_token(token)
+            if payload:
+                g.user_id = payload.get('user_id')
+                g.username = payload.get('username')
+                g.role = payload.get('role')
+    
     return app
 
 
@@ -49,6 +66,7 @@ def register_blueprints(app):
     from .api.dicts import dicts_bp
     from .api.aliyun_accounts import aliyun_accounts_bp
     from .api.domains import domains_bp
+    from .api.operation_logs import logs_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
@@ -63,3 +81,4 @@ def register_blueprints(app):
     app.register_blueprint(dicts_bp)
     app.register_blueprint(aliyun_accounts_bp)
     app.register_blueprint(domains_bp)
+    app.register_blueprint(logs_bp)

@@ -4,6 +4,7 @@
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.operation_log import log_operation
 
 servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
 
@@ -149,10 +150,14 @@ def create_server():
              data.get('os_password'), data.get('docker_user', 'docker'), data.get('docker_password'), data.get('remark'))
         )
         db.commit()
+        server_id = cursor.lastrowid
+        # 记录操作日志
+        log_operation(module='服务器管理', action='create', target_id=server_id, 
+                     target_name=data.get('hostname'), detail={'env_type': data.get('env_type'), 'inner_ip': data.get('inner_ip')})
         return jsonify({
             'code': 200,
             'message': '创建成功',
-            'data': {'id': cursor.lastrowid}
+            'data': {'id': server_id}
         })
     except Exception as e:
         db.rollback()
@@ -189,6 +194,11 @@ def update_server(server_id):
             values.append(server_id)
             cursor.execute(f"UPDATE servers SET {', '.join(fields)} WHERE id = %s", values)
             db.commit()
+            # 记录操作日志
+            cursor.execute("SELECT hostname FROM servers WHERE id = %s", (server_id,))
+            server = cursor.fetchone()
+            log_operation(module='服务器管理', action='update', target_id=server_id, 
+                         target_name=server['hostname'] if server else str(server_id))
         return jsonify({
             'code': 200,
             'message': '更新成功'
@@ -214,8 +224,17 @@ def delete_server(server_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 先获取服务器信息用于日志
+        cursor.execute("SELECT hostname FROM servers WHERE id = %s", (server_id,))
+        server = cursor.fetchone()
+        hostname = server['hostname'] if server else str(server_id)
+        
         cursor.execute("DELETE FROM servers WHERE id = %s", (server_id,))
         db.commit()
+        
+        # 记录操作日志
+        log_operation(module='服务器管理', action='delete', target_id=server_id, target_name=hostname)
+        
         return jsonify({
             'code': 200,
             'message': '删除成功'

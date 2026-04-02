@@ -565,7 +565,7 @@ def sync_aliyun_certs():
             
             # 检查是否已存在
             cursor.execute(
-                "SELECT id, cert_expire_time FROM ssl_certificates WHERE domain = %s",
+                "SELECT id, cert_expire_time, has_cert_file FROM ssl_certificates WHERE domain = %s",
                 (domain,)
             )
             existing = cursor.fetchone()
@@ -601,44 +601,47 @@ def sync_aliyun_certs():
                         existing['id']
                     ))
                     updated_count += 1
-                    db_cert_id = existing['id']
-
-                    # 自动下载证书文件
-                    if cert_info.get('cert_id'):
-                        try:
-                            from ..utils.ssl_checker import download_aliyun_cert
-                            cert_content = download_aliyun_cert(
-                                account['access_key_id'],
-                                account['access_key_secret'],
-                                cert_info['cert_id']
-                            )
-                            if cert_content:
-                                cert_dir = os.path.join(current_app.config.get('CERT_FILES_DIR', ''), str(db_cert_id))
-                                os.makedirs(cert_dir, exist_ok=True)
-
-                                cert_path = os.path.join(cert_dir, 'cert.pem')
-                                with open(cert_path, 'w') as f:
-                                    f.write(cert_content['cert'])
-
-                                key_path = None
-                                if cert_content.get('key'):
-                                    key_path = os.path.join(cert_dir, 'key.pem')
-                                    with open(key_path, 'w') as f:
-                                        f.write(cert_content['key'])
-
-                                cursor.execute("""
-                                    UPDATE ssl_certificates
-                                    SET cert_file_path = %s, key_file_path = %s, has_cert_file = 1
-                                    WHERE id = %s
-                                """, (cert_path, key_path, db_cert_id))
-                                downloaded_count += 1
-                            else:
-                                download_failed_count += 1
-                        except Exception as e:
-                            download_failed_count += 1
-                            logger.warning(f"下载阿里云证书文件失败: {domain} - {e}")
                 else:
                     skipped_count += 1
+
+                db_cert_id = existing['id']
+                # 无论是否更新元数据，只要缺少证书文件就尝试下载
+                if not existing.get('has_cert_file') and cert_info.get('cert_id'):
+                    logger.info(f"证书已存在但缺少文件，尝试下载: {domain} (cert_id={cert_info['cert_id']})")
+                    try:
+                        from ..utils.ssl_checker import download_aliyun_cert
+                        cert_content = download_aliyun_cert(
+                            account['access_key_id'],
+                            account['access_key_secret'],
+                            cert_info['cert_id']
+                        )
+                        if cert_content:
+                            cert_dir = os.path.join(current_app.config.get('CERT_FILES_DIR', ''), str(db_cert_id))
+                            os.makedirs(cert_dir, exist_ok=True)
+
+                            cert_path = os.path.join(cert_dir, 'cert.pem')
+                            with open(cert_path, 'w') as f:
+                                f.write(cert_content['cert'])
+
+                            key_path = None
+                            if cert_content.get('key'):
+                                key_path = os.path.join(cert_dir, 'key.pem')
+                                with open(key_path, 'w') as f:
+                                    f.write(cert_content['key'])
+
+                            cursor.execute("""
+                                UPDATE ssl_certificates
+                                SET cert_file_path = %s, key_file_path = %s, has_cert_file = 1
+                                WHERE id = %s
+                            """, (cert_path, key_path, db_cert_id))
+                            downloaded_count += 1
+                            logger.info(f"证书文件下载成功: {domain}")
+                        else:
+                            download_failed_count += 1
+                            logger.warning(f"证书文件下载返回空: {domain}")
+                    except Exception as e:
+                        download_failed_count += 1
+                        logger.warning(f"下载阿里云证书文件失败: {domain} - {e}")
                 continue
 
             # 插入新证书

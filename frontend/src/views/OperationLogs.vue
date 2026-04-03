@@ -76,10 +76,12 @@
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { getOperationLogs, getOperationModules, getOperationActions } from '../api/operationLogs'
 
+const route = useRoute()
 const loading = ref(false)
 const tableData = ref([])
 const moduleOptions = ref([])
@@ -103,6 +105,14 @@ const pagination = reactive({
 onMounted(() => {
   fetchData()
   fetchFilters()
+})
+
+// 每次进入页面时刷新数据（包括从其他页面返回）
+watch(() => route.path, (newPath) => {
+  if (newPath === '/operation-logs') {
+    fetchData()
+    fetchFilters()
+  }
 })
 
 async function fetchData() {
@@ -157,8 +167,8 @@ function handleReset() {
   fetchData()
 }
 
-function getActionLabel(action) {
-  const map = {
+function getActionLabel(action: string) {
+  const map: Record<string, string> = {
     'create': '新增',
     'update': '更新',
     'delete': '删除',
@@ -176,8 +186,8 @@ function getActionLabel(action) {
   return map[action] || action
 }
 
-function getActionTagType(action) {
-  const map = {
+function getActionTagType(action: string) {
+  const map: Record<string, string> = {
     'create': 'success',
     'update': 'warning',
     'delete': 'danger',
@@ -189,7 +199,7 @@ function getActionTagType(action) {
   return map[action] || 'info'
 }
 
-function formatDetail(detail) {
+function formatDetail(detail: string | object) {
   if (!detail) return '-'
   try {
     const obj = typeof detail === 'string' ? JSON.parse(detail) : detail

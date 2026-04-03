@@ -181,6 +181,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getServers, createServer, updateServer, deleteServer } from '../api/servers'
 import { getEnvTypes, getPlatforms } from '../api/dicts'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { ipValidator, safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
 const router = useRouter()
@@ -190,10 +191,13 @@ const tableData = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增服务器')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
 
 // 字典数据
+/** @type {import('vue').Ref<any[]>} */
 const envTypes = ref([])
+/** @type {import('vue').Ref<any[]>} */
 const platforms = ref([])
 
 const searchParams = reactive({
@@ -331,9 +335,22 @@ function handleReset() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = ''
-  })
+  form.env_type = ''
+  form.platform = ''
+  form.hostname = ''
+  form.inner_ip = ''
+  form.mapped_ip = ''
+  form.public_ip = ''
+  form.cpu = ''
+  form.memory = ''
+  form.sys_disk = ''
+  form.data_disk = ''
+  form.purpose = ''
+  form.os_user = ''
+  form.os_password = ''
+  form.docker_user = ''
+  form.docker_password = ''
+  form.remark = ''
 }
 
 function handleAdd() {
@@ -343,10 +360,16 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleView(row) {
   router.push(`/servers/${row.id}`)
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑服务器'
   editingId.value = row.id
@@ -374,6 +397,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除服务器 "${row.hostname}" 吗？`, '提示', { 
     type: 'warning',
@@ -386,7 +412,11 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
+/**
+ * @param {any} env
+ */
 function getEnvTagType(env) {
+  /** @type {Record<string, string>} */
   const map = {
     '生产': 'danger',
     '测试': 'warning',

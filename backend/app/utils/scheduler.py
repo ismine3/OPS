@@ -10,6 +10,8 @@ import math
 import logging
 import socket
 
+from .script_runner import run_script_file
+
 logger = logging.getLogger(__name__)
 
 # 全局调度器实例
@@ -65,25 +67,40 @@ def execute_script(task_id, script_path, db_config):
             """, (start_time, task_id))
             conn.commit()
             
-            # 执行脚本
-            result = subprocess.run(
-                ['python', script_path],
-                capture_output=True,
-                text=True,
-                timeout=300  # 5分钟超时
-            )
-            
+            try:
+                result = run_script_file(script_path, db_config=db_config, timeout=300)
+            except (FileNotFoundError, RuntimeError, ValueError) as e:
+                end_time = datetime.datetime.now()
+                err = str(e)
+                cursor.execute(
+                    """
+                    UPDATE task_logs 
+                    SET status = %s, end_time = %s, error_message = %s
+                    WHERE id = %s
+                    """,
+                    ("failed", end_time, err, log_id),
+                )
+                cursor.execute(
+                    """
+                    UPDATE scheduled_tasks 
+                    SET last_status = %s, last_output = %s
+                    WHERE id = %s
+                    """,
+                    ("failed", err[:500], task_id),
+                )
+                conn.commit()
+                return
+
             end_time = datetime.datetime.now()
-            
-            # 判断执行结果
+
             if result.returncode == 0:
-                status = 'success'
-                output = result.stdout if result.stdout else '执行成功，无输出'
+                status = "success"
+                output = result.stdout if result.stdout else "执行成功，无输出"
                 error_message = None
             else:
-                status = 'failed'
-                output = result.stdout if result.stdout else ''
-                error_message = result.stderr if result.stderr else '执行失败，无错误信息'
+                status = "failed"
+                output = result.stdout if result.stdout else ""
+                error_message = result.stderr if result.stderr else "执行失败，无错误信息"
             
             # 更新任务日志
             cursor.execute("""
@@ -186,7 +203,7 @@ def add_task_to_scheduler(task_id, script_path, cron_expression, db_config):
         
         return True
     except Exception as e:
-        print(f"添加任务到调度器失败: {e}")
+        logger.exception("添加任务到调度器失败: %s", e)
         return False
 
 
@@ -199,7 +216,7 @@ def remove_task_from_scheduler(task_id):
             return True
         return False
     except Exception as e:
-        print(f"从调度器移除任务失败: {e}")
+        logger.exception("从调度器移除任务失败: %s", e)
         return False
 
 
@@ -229,9 +246,9 @@ def init_scheduler(app):
                     task['cron_expression'],
                     db_config
                 )
-                print(f"已加载定时任务: {task['id']}")
+                logger.info("已加载定时任务: %s", task["id"])
             else:
-                print(f"任务 {task['id']} 的脚本文件不存在，跳过")
+                logger.warning("任务 %s 的脚本文件不存在，跳过", task["id"])
         
         cursor.close()
         conn.close()
@@ -269,9 +286,9 @@ def init_scheduler(app):
                     args=[db_config, app_config],
                     replace_existing=True
                 )
-                print(f"已注册内置任务: SSL证书自动检测+通知 (cron: {cert_cron})")
+                logger.info("已注册内置任务: SSL证书自动检测+通知 (cron: %s)", cert_cron)
         except Exception as e:
-            print(f"注册SSL证书自动检测任务失败: {e}")
+            logger.exception("注册SSL证书自动检测任务失败: %s", e)
         
         # 注册内置定时任务：域名到期自动通知
         domain_cron = app.config.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')
@@ -298,20 +315,26 @@ def init_scheduler(app):
                     args=[db_config, app_config],
                     replace_existing=True
                 )
-                print(f"已注册内置任务: 域名到期自动通知 (cron: {domain_cron})")
+                logger.info("已注册内置任务: 域名到期自动通知 (cron: %s)", domain_cron)
         except Exception as e:
-            print(f"注册域名到期自动通知任务失败: {e}")
+            logger.exception("注册域名到期自动通知任务失败: %s", e)
         
         # 启动调度器
         if not scheduler.running:
             scheduler.start()
-            print("定时任务调度器已启动")
+            logger.info("定时任务调度器已启动")
         
         # 将 db_config 存储到调度器，供后续使用
         scheduler.db_config = db_config
         
     except Exception as e:
-        print(f"初始化调度器失败: {e}")
+        logger.exception(
+            "初始化调度器失败（定时任务将不可用）: DB_HOST=%s DB_PORT=%s DB_NAME=%s | %s",
+            app.config.get("DB_HOST"),
+            app.config.get("DB_PORT"),
+            app.config.get("DB_NAME"),
+            e,
+        )
 
 
 def get_scheduler_db_config():
@@ -411,14 +434,13 @@ def auto_cert_check_and_notify(db_config, app_config):
                         datetime.datetime.now(),
                         cert['id']
                     ))
+                    conn.commit()
                     logger.info(f"证书 {cert['domain']} 检测完成，剩余 {cert_info['remaining_days']} 天")
                 else:
                     logger.error(f"证书 {cert['domain']} 检测失败: {last_exception}")
                     
             except Exception as e:
                 logger.error(f"证书 {cert['domain']} 检测异常: {str(e)}")
-        
-        conn.commit()
         
         # 查询需要预警的证书
         warning_days = app_config.get('ssl_warning_days', 30)

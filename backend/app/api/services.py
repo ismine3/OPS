@@ -81,8 +81,6 @@ def get_services():
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @services_bp.route('', methods=['POST'])
 @jwt_required
@@ -122,8 +120,6 @@ def create_service():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @services_bp.route('/<int:service_id>', methods=['PUT'])
 @jwt_required
@@ -167,8 +163,6 @@ def update_service(service_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @services_bp.route('/<int:service_id>', methods=['DELETE'])
 @jwt_required
@@ -203,4 +197,3 @@ def delete_service(service_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

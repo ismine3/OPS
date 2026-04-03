@@ -24,10 +24,10 @@ def create_user(username, password, display_name, role='operator'):
     with db.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO users (username, password_hash, display_name, role, is_active)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO users (username, password_hash, display_name, role, is_active, password_changed_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
             """,
-            (username, password_hash, display_name, role, True)
+            (username, password_hash, display_name, role, True),
         )
         db.commit()
         return cursor.lastrowid
@@ -154,8 +154,8 @@ def update_password(user_id, password_hash):
     db = get_db()
     with db.cursor() as cursor:
         cursor.execute(
-            "UPDATE users SET password_hash = %s WHERE id = %s",
-            (password_hash, user_id)
+            "UPDATE users SET password_hash = %s, password_changed_at = NOW() WHERE id = %s",
+            (password_hash, user_id),
         )
         db.commit()
         return cursor.rowcount > 0

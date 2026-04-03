@@ -177,8 +177,15 @@
     <!-- 阿里云同步弹窗 -->
     <el-dialog v-model="syncDialogVisible" title="阿里云证书同步" width="400px" destroy-on-close>
       <el-form :model="syncForm" label-width="120px">
-        <el-form-item label="阿里云账户ID">
-          <el-input-number v-model="syncForm.accountId" :min="1" style="width: 100%" placeholder="请输入阿里云账户ID" />
+        <el-form-item label="阿里云账户">
+          <el-select v-model="syncForm.accountIds" placeholder="请选择阿里云账户（支持多选）" style="width: 100%" filterable multiple collapse-tags>
+            <el-option
+              v-for="item in aliyunAccountList"
+              :key="item.id"
+              :label="item.account_name"
+              :value="item.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -199,7 +206,7 @@
             :auto-upload="false"
             :limit="1"
             accept=".pem,.crt,.cer"
-            :on-change="(file) => uploadFiles.certFile = file.raw"
+            :on-change="(file: any) => uploadFiles.certFile = file.raw"
             :on-remove="() => uploadFiles.certFile = null"
           >
             <el-button type="primary" :icon="Upload">选择证书文件</el-button>
@@ -214,7 +221,7 @@
             :auto-upload="false"
             :limit="1"
             accept=".pem,.key"
-            :on-change="(file) => uploadFiles.keyFile = file.raw"
+            :on-change="(file: any) => uploadFiles.keyFile = file.raw"
             :on-remove="() => uploadFiles.keyFile = null"
           >
             <el-button type="primary" :icon="Upload">选择私钥文件</el-button>
@@ -239,7 +246,7 @@
             :auto-upload="false"
             :limit="1"
             accept=".pem,.crt,.cer"
-            :on-change="(file) => uploadCreateForm.certFile = file.raw"
+            :on-change="(file: any) => uploadCreateForm.certFile = file.raw"
             :on-remove="() => uploadCreateForm.certFile = null"
           >
             <el-button type="primary" :icon="Upload">选择证书文件</el-button>
@@ -254,7 +261,7 @@
             :auto-upload="false"
             :limit="1"
             accept=".pem,.key"
-            :on-change="(file) => uploadCreateForm.keyFile = file.raw"
+            :on-change="(file: any) => uploadCreateForm.keyFile = file.raw"
             :on-remove="() => uploadCreateForm.keyFile = null"
           >
             <el-button type="primary" :icon="Upload">选择私钥文件</el-button>
@@ -292,10 +299,7 @@
           <el-col :span="12">
             <el-form-item label="环境类型">
               <el-select v-model="deployFilter.env_type" placeholder="全部环境" clearable style="width: 100%" @change="handleDeployFilterChange">
-                <el-option label="测试" value="测试" />
-                <el-option label="生产" value="生产" />
-                <el-option label="智慧环保" value="智慧环保" />
-                <el-option label="水电集团" value="水电集团" />
+                <el-option v-for="item in envTypes" :key="item.id" :label="item.name" :value="item.name" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -335,6 +339,34 @@
             </el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="连接IP">
+          <el-select v-model="deployForm.ssh_ip_type" style="width: 100%">
+            <el-option 
+              label="内网IP" 
+              value="inner" 
+            >
+              <span>内网IP</span>
+              <span v-if="selectedServer && selectedServer.inner_ip" class="ssh-user-info">({{ selectedServer.inner_ip }})</span>
+            </el-option>
+            <el-option 
+              label="映射IP" 
+              value="mapped" 
+            >
+              <span>映射IP</span>
+              <span v-if="selectedServer && selectedServer.mapped_ip" class="ssh-user-info">({{ selectedServer.mapped_ip }})</span>
+            </el-option>
+            <el-option 
+              label="公网IP" 
+              value="public" 
+            >
+              <span>公网IP</span>
+              <span v-if="selectedServer && selectedServer.public_ip" class="ssh-user-info">({{ selectedServer.public_ip }})</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="SSH端口">
+          <el-input-number v-model="deployForm.ssh_port" :min="1" :max="65535" style="width: 100%" />
+        </el-form-item>
         <el-form-item label="远程目录" required>
           <el-input v-model="deployForm.remote_path" placeholder="如 /etc/nginx/ssl/" />
         </el-form-item>
@@ -347,25 +379,44 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Bell, Upload, Download, Promotion } from '@element-plus/icons-vue'
 import { getCerts, createCert, updateCert, deleteCert, checkCert, checkCerts, syncAliyunCerts, notifyCerts, uploadCertFiles, downloadCertFiles, deleteCertFiles, deployCert, uploadAndCreateCert } from '../api/certs'
 import { getServers } from '../api/servers'
+import { getAliyunAccounts } from '../api/aliyunAccounts'
+import { getEnvTypes } from '../api/dicts'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { domainValidator, safeText, maxLength, pathValidator, isSafeSearch } from '@/utils/validators'
+
+// 证书类型定义
+interface Cert {
+  id: number
+  domain: string
+  project_name: string
+  cert_type: number
+  issuer: string
+  cert_expire_time: string
+  remaining_days: number
+  brand: string
+  status: string
+  last_check_time: string
+  has_cert_file: number
+  checking?: boolean
+}
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const checkLoading = ref(false)
 const syncLoading = ref(false)
 const notifyLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<Cert[]>([])
 const dialogVisible = ref(false)
 const syncDialogVisible = ref(false)
 const dialogTitle = ref('新增证书')
-const editingId = ref(null)
-const formRef = ref(null)
+const editingId = ref<number | null>(null)
+const formRef = ref<any>(null)
 
 const searchParams = reactive({
   search: '',
@@ -391,20 +442,29 @@ const form = reactive({
 })
 
 const syncForm = reactive({
-  accountId: null
+  accountIds: []
 })
+
+const aliyunAccountList = ref<any[]>([])
 
 const uploadDialogVisible = ref(false)
 const deployDialogVisible = ref(false)
 const uploadLoading = ref(false)
 const deployLoading = ref(false)
-const uploadTarget = reactive({ id: null, domain: '' })
-const deployTarget = reactive({ id: null, domain: '' })
+const uploadTarget = reactive({ id: null as number | null, domain: '' })
+const deployTarget = reactive({ id: null as number | null, domain: '' })
 const uploadFiles = reactive({ certFile: null, keyFile: null })
-const deployForm = reactive({ server_id: null, remote_path: '', ssh_user: 'root' })
+const deployForm = reactive({ 
+  server_id: null, 
+  remote_path: '', 
+  ssh_user: 'root',
+  ssh_ip_type: 'inner',  // IP类型，默认内网
+  ssh_port: 22           // SSH端口，默认22
+})
 const deployFilter = reactive({ env_type: '', platform: '' })
-const serverList = ref([])
-const selectedServer = ref(null)
+const serverList = ref<any[]>([])
+const selectedServer = ref<any>(null)
+const envTypes = ref<{id: number, name: string}[]>([])
 const certUploadRef = ref(null)
 const keyUploadRef = ref(null)
 
@@ -476,13 +536,23 @@ const filteredServerList = computed(() => {
 })
 
 onMounted(() => {
+  fetchDicts()
   fetchData()
 })
+
+async function fetchDicts() {
+  try {
+    const res = await getEnvTypes()
+    envTypes.value = res.data || []
+  } catch (e) {
+    console.error('加载字典数据失败', e)
+  }
+}
 
 async function fetchData() {
   loading.value = true
   try {
-    const params = { ...searchParams, page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { ...searchParams, page: pagination.page, page_size: pagination.pageSize }
     // 移除空值参数
     Object.keys(params).forEach(key => {
       if (params[key] === '' || params[key] === null || params[key] === undefined) {
@@ -534,7 +604,7 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
-function handleEdit(row) {
+function handleEdit(row: Cert) {
   dialogTitle.value = '编辑证书'
   editingId.value = row.id
   Object.assign(form, row)
@@ -561,7 +631,7 @@ async function handleSubmit() {
   }
 }
 
-function handleDelete(row) {
+function handleDelete(row: Cert) {
   ElMessageBox.confirm(`确定要删除证书 "${row.domain}" 吗？`, '提示', { 
     type: 'warning',
     confirmButtonText: '确定',
@@ -573,7 +643,7 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
-async function handleCheck(row) {
+async function handleCheck(row: Cert) {
   row.checking = true
   try {
     await checkCert(row.id)
@@ -603,23 +673,45 @@ async function handleBatchCheck() {
   }
 }
 
-function handleSyncDialog() {
-  syncForm.accountId = null
+async function handleSyncDialog() {
+  syncForm.accountIds = []
   syncDialogVisible.value = true
+  try {
+    const res = await getAliyunAccounts()
+    aliyunAccountList.value = res.data || []
+  } catch (e) {
+    console.error('获取阿里云账户列表失败:', e)
+    aliyunAccountList.value = []
+  }
 }
 
 async function handleSync() {
-  if (!syncForm.accountId) {
-    ElMessage.warning('请输入阿里云账户ID')
+  if (!syncForm.accountIds || syncForm.accountIds.length === 0) {
+    ElMessage.warning('请选择至少一个阿里云账户')
     return
   }
-  
+
   syncLoading.value = true
   try {
-    await syncAliyunCerts(syncForm.accountId)
-    ElMessage.success('同步成功')
+    const results = await Promise.allSettled(
+      syncForm.accountIds.map(id => syncAliyunCerts(id))
+    )
+    const succeeded = results.filter(r => r.status === 'fulfilled')
+    const failed = results.filter(r => r.status === 'rejected')
+
+    if (failed.length === 0) {
+      ElMessage.success(`同步成功，共同步 ${succeeded.length} 个账户`)
+    } else if (succeeded.length === 0) {
+      ElMessage.error('所有账户同步失败')
+    } else {
+      ElMessage.warning(`${succeeded.length} 个账户同步成功，${failed.length} 个失败`)
+    }
+
     syncDialogVisible.value = false
     fetchData()
+  } catch (error) {
+    // Promise.allSettled 不会 reject，此 catch 只处理意外异常
+    console.error('同步阿里云证书失败:', error)
   } finally {
     syncLoading.value = false
   }
@@ -634,14 +726,14 @@ async function handleNotify() {
     } else {
       ElMessage.info('没有需要预警的证书')
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '通知发送失败')
   } finally {
     notifyLoading.value = false
   }
 }
 
-function handleUploadDialog(row) {
+function handleUploadDialog(row: Cert) {
   uploadTarget.id = row.id
   uploadTarget.domain = row.domain
   uploadFiles.certFile = null
@@ -662,21 +754,21 @@ async function handleUpload() {
     if (uploadFiles.keyFile) {
       formData.append('key_file', uploadFiles.keyFile)
     }
-    await uploadCertFiles(uploadTarget.id, formData)
+    await uploadCertFiles(uploadTarget.id!, formData)
     ElMessage.success('证书文件上传成功')
     uploadDialogVisible.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '上传失败')
   } finally {
     uploadLoading.value = false
   }
 }
 
-async function handleDownload(row) {
+async function handleDownload(row: Cert) {
   try {
     const res = await downloadCertFiles(row.id)
-    const blob = new Blob([res], { type: 'application/zip' })
+    const blob = new Blob([res as unknown as BlobPart], { type: 'application/zip' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -689,12 +781,14 @@ async function handleDownload(row) {
   }
 }
 
-async function handleDeployDialog(row) {
+async function handleDeployDialog(row: Cert) {
   deployTarget.id = row.id
   deployTarget.domain = row.domain
   deployForm.server_id = null
   deployForm.remote_path = ''
   deployForm.ssh_user = 'root'
+  deployForm.ssh_ip_type = 'inner'
+  deployForm.ssh_port = 22
   deployFilter.env_type = ''
   deployFilter.platform = ''
   selectedServer.value = null
@@ -717,7 +811,7 @@ function handleDeployFilterChange() {
   selectedServer.value = null
 }
 
-function handleServerChange(serverId) {
+function handleServerChange(serverId: number) {
   selectedServer.value = serverList.value.find(s => s.id === serverId) || null
   // 如果服务器没有普通用户，自动选择系统用户
   if (selectedServer.value && !selectedServer.value.docker_user) {
@@ -746,10 +840,10 @@ async function handleDeploy() {
   
   deployLoading.value = true
   try {
-    await deployCert(deployTarget.id, deployForm)
+    await deployCert(deployTarget.id!, deployForm)
     ElMessage.success('部署成功')
     deployDialogVisible.value = false
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '部署失败')
   } finally {
     deployLoading.value = false
@@ -803,21 +897,21 @@ async function handleUploadCreate() {
     ElMessage.success(`证书上传成功！域名: ${res.data.domain}, 剩余 ${res.data.remaining_days} 天`)
     uploadCreateDialogVisible.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '上传失败')
   } finally {
     uploadCreateLoading.value = false
   }
 }
 
-function formatDate(str) {
+function formatDate(str: string) {
   if (!str) return '-'
   const date = new Date(str)
   if (isNaN(date.getTime())) return str
   return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
 }
 
-function formatDateTime(str) {
+function formatDateTime(str: string) {
   if (!str) return '-'
   const date = new Date(str)
   if (isNaN(date.getTime())) return str
@@ -826,8 +920,8 @@ function formatDateTime(str) {
   return `${dateStr} ${timeStr}`
 }
 
-function getCertTypeLabel(type) {
-  const map = {
+function getCertTypeLabel(type: number) {
+  const map: Record<number, string> = {
     0: '自动检测',
     1: '手动录入',
     2: '阿里云证书'
@@ -835,8 +929,8 @@ function getCertTypeLabel(type) {
   return map[type] || '未知'
 }
 
-function getCertTypeTag(type) {
-  const map = {
+function getCertTypeTag(type: number) {
+  const map: Record<number, string> = {
     0: 'primary',
     1: 'info',
     2: 'warning'
@@ -844,8 +938,8 @@ function getCertTypeTag(type) {
   return map[type] || 'info'
 }
 
-function getEnvTagType(env) {
-  const map = {
+function getEnvTagType(env: string) {
+  const map: Record<string, string> = {
     '生产': 'danger',
     '测试': 'warning',
     '智慧环保': 'success',
@@ -854,15 +948,15 @@ function getEnvTagType(env) {
   return map[env] || 'info'
 }
 
-function getDaysTagType(days) {
+function getDaysTagType(days: number) {
   if (days <= 0) return 'danger'
   if (days < 30) return 'danger'
   if (days < 90) return 'warning'
   return 'success'
 }
 
-function getStatusTagType(status) {
-  const map = {
+function getStatusTagType(status: string) {
+  const map: Record<string, string> = {
     '正常': 'success',
     '即将过期': 'warning',
     '已过期': 'danger'

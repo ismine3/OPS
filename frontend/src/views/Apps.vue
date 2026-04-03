@@ -114,6 +114,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getApps, createApp, updateApp, deleteApp } from '../api/apps'
 import PasswordDisplay from '../components/PasswordDisplay.vue'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, urlValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
@@ -122,6 +123,7 @@ const tableData = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增应用')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
 
 const searchParams = reactive({
@@ -205,9 +207,13 @@ function handleReset() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = ''
-  })
+  form.seq_no = ''
+  form.name = ''
+  form.company = ''
+  form.access_url = ''
+  form.username = ''
+  form.password = ''
+  form.remark = ''
 }
 
 function handleAdd() {
@@ -217,6 +223,9 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑应用'
   editingId.value = row.id
@@ -244,6 +253,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除应用 "${row.name}" 吗？`, '提示', { 
     type: 'warning',
@@ -256,6 +268,9 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
+/**
+ * @param {any} url
+ */
 function isHttpUrl(url) {
   return url && (url.startsWith('http://') || url.startsWith('https://'))
 }

@@ -9,6 +9,14 @@ import datetime
 logs_bp = Blueprint('operation_logs', __name__, url_prefix='/api/operation-logs')
 
 
+def _safe_positive_int(value, default, minimum=1, maximum=500):
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, n))
+
+
 @logs_bp.route('', methods=['GET'])
 @jwt_required
 def get_logs():
@@ -19,9 +27,8 @@ def get_logs():
     db = get_db()
     cursor = db.cursor()
     try:
-        # 分页参数
-        page = int(request.args.get('page', 1))
-        page_size = int(request.args.get('page_size', 20))
+        page = _safe_positive_int(request.args.get('page', 1), 1, 1, 10_000)
+        page_size = _safe_positive_int(request.args.get('page_size', 20), 20, 1, 200)
         offset = (page - 1) * page_size
         
         # 筛选参数
@@ -54,7 +61,8 @@ def get_logs():
         # 查询总数
         count_sql = f"SELECT COUNT(*) as total FROM operation_logs {where_clause}"
         cursor.execute(count_sql, params)
-        total = cursor.fetchone()['total']
+        count_row = cursor.fetchone()
+        total = count_row['total'] if count_row else 0
         
         # 查询数据
         data_sql = f"""
@@ -87,8 +95,8 @@ def get_logs():
             'message': f'获取操作日志失败: {str(e)}'
         }), 500
     finally:
-        cursor.close()
-        db.close()
+        if cursor:
+            cursor.close()
 
 
 @logs_bp.route('/modules', methods=['GET'])
@@ -105,8 +113,8 @@ def get_modules():
             'data': modules
         })
     finally:
-        cursor.close()
-        db.close()
+        if cursor:
+            cursor.close()
 
 
 @logs_bp.route('/actions', methods=['GET'])
@@ -123,5 +131,5 @@ def get_actions():
             'data': actions
         })
     finally:
-        cursor.close()
-        db.close()
+        if cursor:
+            cursor.close()

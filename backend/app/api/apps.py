@@ -43,8 +43,6 @@ def get_app_detail(app_id):
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @apps_bp.route('', methods=['GET'])
 @jwt_required
@@ -91,6 +89,14 @@ def get_apps():
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         apps = cursor.fetchall()
+        
+        # 解密密码字段
+        for app in apps:
+            if app.get('password'):
+                try:
+                    app['password'] = decrypt_data(app['password'])
+                except:
+                    pass  # 解密失败保持原值
 
         return jsonify({
             'code': 200,
@@ -103,8 +109,6 @@ def get_apps():
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @apps_bp.route('', methods=['POST'])
 @jwt_required
@@ -202,8 +206,6 @@ def create_app():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @apps_bp.route('/<int:app_id>', methods=['PUT'])
 @jwt_required
@@ -298,8 +300,6 @@ def update_app(app_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @apps_bp.route('/<int:app_id>', methods=['DELETE'])
 @jwt_required
@@ -334,4 +334,3 @@ def delete_app(app_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

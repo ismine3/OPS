@@ -132,6 +132,7 @@ const groupList = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增账户')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
 
 const searchParams = reactive({
@@ -164,7 +165,9 @@ async function fetchData() {
     const res = await getAccounts(searchParams)
     tableData.value = res.data || []
     // 提取分组列表
-    const groups = [...new Set(tableData.value.map(item => item.group_name).filter(Boolean))]
+    // @ts-ignore
+    const groups = [...new Set((tableData.value || []).map((/** @type {any} */ item) => item.group_name).filter(Boolean))]
+    // @ts-ignore
     groupList.value = groups
   } finally {
     loading.value = false
@@ -182,9 +185,12 @@ function handleReset() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = ''
-  })
+  form.group_name = ''
+  form.name = ''
+  form.url = ''
+  form.username = ''
+  form.password = ''
+  form.remark = ''
 }
 
 function handleAdd() {
@@ -194,6 +200,9 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑账户'
   editingId.value = row.id
@@ -221,6 +230,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除账户 "${row.name}" 吗？`, '提示', { 
     type: 'warning',
@@ -233,6 +245,9 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
+/**
+ * @param {any} url
+ */
 function isHttpUrl(url) {
   return url && (url.startsWith('http://') || url.startsWith('https://'))
 }

@@ -106,12 +106,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser, resetPassword } from '../api/users'
 import { useUserStore } from '../stores/user'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, passwordStrength, isSafeSearch } from '@/utils/validators'
 
 const userStore = useUserStore()
@@ -123,8 +124,8 @@ const dialogVisible = ref(false)
 const resetDialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
 const editingId = ref(null)
-const formRef = ref(null)
-const resetFormRef = ref(null)
+const formRef = ref<any>(null)
+const resetFormRef = ref<any>(null)
 
 const currentUserId = computed(() => userStore.userInfo.id)
 
@@ -198,9 +199,11 @@ function handleReset() {
 }
 
 function resetFormData() {
-  Object.keys(form).forEach(key => {
-    form[key] = key === 'is_active' ? true : ''
-  })
+  form.username = ''
+  form.password = ''
+  form.display_name = ''
+  form.role = ''
+  form.is_active = true
 }
 
 function handleAdd() {
@@ -210,14 +213,14 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
-function handleEdit(row) {
+function handleEdit(row: any) {
   dialogTitle.value = '编辑用户'
   editingId.value = row.id
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-function handleResetPassword(row) {
+function handleResetPassword(row: any) {
   resetForm.userId = row.id
   resetForm.username = row.username
   resetForm.new_password = ''
@@ -251,7 +254,7 @@ async function handleResetSubmit() {
 
   resetLoading.value = true
   try {
-    await resetPassword(resetForm.userId, { new_password: resetForm.new_password })
+    await resetPassword(resetForm.userId!, { new_password: resetForm.new_password })
     ElMessage.success('密码重置成功')
     resetDialogVisible.value = false
   } finally {
@@ -259,7 +262,7 @@ async function handleResetSubmit() {
   }
 }
 
-function handleDelete(row) {
+function handleDelete(row: any) {
   if (row.id === currentUserId.value) {
     ElMessage.warning('不能删除当前登录用户')
     return
@@ -275,8 +278,8 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
-function getRoleTagType(role) {
-  const map = {
+function getRoleTagType(role: string) {
+  const map: Record<string, string> = {
     'admin': 'danger',
     'operator': 'warning',
     'viewer': 'info'
@@ -284,8 +287,8 @@ function getRoleTagType(role) {
   return map[role] || 'info'
 }
 
-function getRoleText(role) {
-  const map = {
+function getRoleText(role: string) {
+  const map: Record<string, string> = {
     'admin': '管理员',
     'operator': '操作员',
     'viewer': '只读用户'

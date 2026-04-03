@@ -1,7 +1,7 @@
 import request from './request'
 
 // 获取操作日志列表
-export function getOperationLogs(params) {
+export function getOperationLogs(params: Record<string, any>) {
   return request.get('/operation-logs', { params })
 }
 

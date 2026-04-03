@@ -122,8 +122,49 @@ import { Monitor, SetUp, Grid, Document, Timer, Link, Warning } from '@element-p
 import { getDashboardStats } from '../api/dashboard'
 
 const loading = ref(false)
+
+/**
+ * @typedef {Object} Counts
+ * @property {number} [servers]
+ * @property {number} [services]
+ * @property {number} [apps]
+ * @property {number} [domains]
+ * @property {number} [certs]
+ * @property {number} [expiring_certs]
+ */
+
+/**
+ * @typedef {Object} EnvDistributionItem
+ * @property {string} env_type
+ * @property {number} count
+ */
+
+/**
+ * @typedef {Object} RecentCertItem
+ * @property {string} [domain]
+ * @property {string} [project_name]
+ * @property {string} [cert_expire_time]
+ * @property {number} [remaining_days]
+ * @property {string} [type]
+ */
+
+/**
+ * @typedef {Object} Stats
+ * @property {Counts} counts
+ * @property {EnvDistributionItem[]} env_distribution
+ * @property {RecentCertItem[]} recent_certs
+ */
+
+/** @type {Stats} */
 const stats = reactive({
-  counts: {},
+  counts: {
+    servers: 0,
+    services: 0,
+    apps: 0,
+    domains: 0,
+    certs: 0,
+    expiring_certs: 0
+  },
   env_distribution: [],
   recent_certs: []
 })
@@ -146,7 +187,11 @@ async function fetchData() {
   }
 }
 
+/**
+ * @param {any} env
+ */
 function getEnvTagType(env) {
+  /** @type {Record<string, string>} */
   const map = {
     '生产': 'danger',
     '测试': 'warning',
@@ -156,7 +201,11 @@ function getEnvTagType(env) {
   return map[env] || 'info'
 }
 
+/**
+ * @param {any} env
+ */
 function getProgressColor(env) {
+  /** @type {Record<string, string>} */
   const map = {
     '生产': '#f56c6c',
     '测试': '#e6a23c',
@@ -166,11 +215,17 @@ function getProgressColor(env) {
   return map[env] || '#909399'
 }
 
+/**
+ * @param {any} count
+ */
 function getPercentage(count) {
   if (!totalServers.value) return 0
   return Math.round((count / totalServers.value) * 100)
 }
 
+/**
+ * @param {any} days
+ */
 function getDaysTagType(days) {
   if (days < 30) return 'danger'
   if (days < 90) return 'warning'

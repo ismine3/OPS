@@ -64,6 +64,19 @@ def get_servers():
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         servers = cursor.fetchall()
+        
+        # 解密密码字段
+        for server in servers:
+            if server.get('os_password'):
+                try:
+                    server['os_password'] = decrypt_data(server['os_password'])
+                except:
+                    pass  # 解密失败保持原值
+            if server.get('docker_password'):
+                try:
+                    server['docker_password'] = decrypt_data(server['docker_password'])
+                except:
+                    pass  # 解密失败保持原值
 
         return jsonify({
             'code': 200,
@@ -76,8 +89,6 @@ def get_servers():
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @servers_bp.route('/<int:server_id>', methods=['GET'])
 @jwt_required
@@ -124,8 +135,6 @@ def get_server_detail(server_id):
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @servers_bp.route('/list', methods=['GET'])
 @jwt_required
@@ -144,8 +153,6 @@ def get_servers_list():
         })
     finally:
         cursor.close()
-        db.close()
-
 
 @servers_bp.route('', methods=['POST'])
 @jwt_required
@@ -157,8 +164,10 @@ def create_server():
     db = get_db()
     cursor = db.cursor()
     try:
-        data = request.json
-        
+        data = request.get_json(silent=True) or {}
+        if not data:
+            return jsonify({"code": 400, "message": "请求体不能为空"}), 400
+
         # 输入验证
         hostname = data.get('hostname')
         inner_ip = data.get('inner_ip')
@@ -297,8 +306,6 @@ def create_server():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @servers_bp.route('/<int:server_id>', methods=['PUT'])
 @jwt_required
@@ -310,7 +317,10 @@ def update_server(server_id):
     db = get_db()
     cursor = db.cursor()
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
+        if not data:
+            return jsonify({"code": 400, "message": "请求体不能为空"}), 400
+
         fields = []
         values = []
         # 允许的字段白名单，防止SQL注入
@@ -449,8 +459,6 @@ def update_server(server_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @servers_bp.route('/<int:server_id>', methods=['DELETE'])
 @jwt_required
@@ -494,4 +502,3 @@ def delete_server(server_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

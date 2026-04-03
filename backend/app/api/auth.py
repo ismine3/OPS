@@ -71,13 +71,15 @@ def login():
     # 记录登录成功
     log_operation(module='用户认证', action='login', target_id=user['id'], target_name=username, user_id=user['id'], username=username)
     
-    # 生成 token
-    token = generate_token(
-        user_id=user['id'],
-        username=user['username'],
-        role=user['role']
-    )
-    
+    try:
+        token = generate_token(
+            user_id=user['id'],
+            username=user['username'],
+            role=user['role'],
+        )
+    except RuntimeError as e:
+        return jsonify({'code': 500, 'message': str(e)}), 500
+
     return jsonify({
         'code': 200,
         'message': '登录成功',

@@ -31,5 +31,5 @@ RUN mkdir -p /app/app/uploads/scripts /app/app/uploads/certs
 # 暴露端口
 EXPOSE 5000
 
-# 启动命令
-CMD ["python", "run.py"]
+# Gunicorn：单 worker 多线程（避免 APScheduler 多进程重复注册定时任务）
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "120", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "run:app"]

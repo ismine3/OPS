@@ -130,17 +130,22 @@ import { Plus } from '@element-plus/icons-vue'
 import { getServices, createService, updateService, deleteService } from '../api/services'
 import { getServerList } from '../api/servers'
 import { getEnvTypes, getServiceCategories } from '../api/dicts'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, portValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const tableData = ref([])
+/** @type {import('vue').Ref<any[]>} */
 const serverList = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增服务')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
+/** @type {import('vue').Ref<any[]>} */
 const envTypes = ref([])
+/** @type {import('vue').Ref<any[]>} */
 const serviceCategories = ref([])
 
 const searchParams = reactive({
@@ -241,9 +246,13 @@ function handleReset() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = ''
-  })
+  form.server_id = ''
+  form.category = ''
+  form.service_name = ''
+  form.version = ''
+  form.inner_port = ''
+  form.mapped_port = ''
+  form.remark = ''
 }
 
 function handleAdd() {
@@ -253,6 +262,9 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑服务'
   editingId.value = row.id
@@ -280,6 +292,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除服务 "${row.service_name}" 吗？`, '提示', { 
     type: 'warning',
@@ -292,7 +307,11 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
+/**
+ * @param {any} env
+ */
 function getEnvTagType(env) {
+  /** @type {Record<string, string>} */
   const map = {
     '生产': 'danger',
     '测试': 'warning',

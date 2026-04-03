@@ -39,6 +39,7 @@ def init_database():
         `display_name` VARCHAR(100) NOT NULL COMMENT '显示名称',
         `role` VARCHAR(50) NOT NULL DEFAULT 'operator' COMMENT '角色: admin/operator/viewer',
         `is_active` BOOLEAN DEFAULT TRUE COMMENT '是否激活',
+        `password_changed_at` DATETIME NULL DEFAULT NULL COMMENT '密码修改时间，用于作废旧 JWT',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX `idx_username` (`username`),

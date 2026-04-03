@@ -6,6 +6,7 @@ from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.ssl_checker import send_domain_expiry_notification
 from ..utils.operation_log import log_operation
+from ..utils.password_utils import decrypt_data
 
 domains_bp = Blueprint('domains', __name__, url_prefix='/api/domains')
 
@@ -97,8 +98,6 @@ def get_domains():
         }), 200
     finally:
         cursor.close()
-        db.close()
-
 
 @domains_bp.route('', methods=['POST'])
 @jwt_required
@@ -185,8 +184,6 @@ def create_domain():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @domains_bp.route('/<int:domain_id>', methods=['PUT'])
 @jwt_required
@@ -279,8 +276,6 @@ def update_domain(domain_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @domains_bp.route('/<int:domain_id>', methods=['DELETE'])
 @jwt_required
@@ -324,8 +319,6 @@ def delete_domain(domain_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @domains_bp.route('/sync-aliyun', methods=['POST'])
 @jwt_required
@@ -356,29 +349,39 @@ def sync_aliyun_domains():
     db = get_db()
     cursor = db.cursor()
     try:
-        # 获取阿里云账户信息
+        # 获取阿里云账户信息（需要解密 access_key_secret）
         cursor.execute(
             "SELECT access_key_id, access_key_secret FROM aliyun_accounts WHERE id = %s AND is_active = 1",
             (account_id,)
         )
         account = cursor.fetchone()
-        
+            
         if not account:
             return jsonify({
                 'code': 404,
                 'message': '阿里云账户不存在或已禁用'
             }), 404
-        
+            
+        # 解密 AccessKey Secret
+        try:
+            access_key_secret = decrypt_data(account['access_key_secret'])
+        except Exception as e:
+            logger.error(f'AccessKey Secret 解密失败：{e}')
+            return jsonify({
+                'code': 500,
+                'message': f'AccessKey Secret 解密失败：{str(e)}'
+            }), 500
+            
         # 创建阿里云客户端
         try:
             client = create_aliyun_client(
                 account['access_key_id'],
-                account['access_key_secret']
+                access_key_secret
             )
         except Exception as e:
             return jsonify({
                 'code': 500,
-                'message': f'创建阿里云客户端失败: {str(e)}'
+                'message': f'创建阿里云客户端失败：{str(e)}'
             }), 500
         
         # 查询域名列表
@@ -577,8 +580,6 @@ def sync_aliyun_domains():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @domains_bp.route('/notify', methods=['POST'])
 @jwt_required
@@ -648,4 +649,3 @@ def trigger_domain_notify():
         }), 500
     finally:
         cursor.close()
-        db.close()

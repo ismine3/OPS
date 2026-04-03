@@ -23,7 +23,6 @@ def _get_dict_items(table_name):
         return jsonify({"code": 200, "data": items})
     finally:
         cursor.close()
-        db.close()
 
 
 def _create_dict_item(table_name, name, sort_order=0):
@@ -48,7 +47,6 @@ def _create_dict_item(table_name, name, sort_order=0):
         return jsonify({"code": 500, "message": f"创建失败: {str(e)}"}), 500
     finally:
         cursor.close()
-        db.close()
 
 
 def _update_dict_item(table_name, item_id, name, sort_order):
@@ -79,7 +77,6 @@ def _update_dict_item(table_name, item_id, name, sort_order):
         return jsonify({"code": 500, "message": f"更新失败: {str(e)}"}), 500
     finally:
         cursor.close()
-        db.close()
 
 
 def _delete_dict_item(table_name, item_id, check_table=None, check_field=None):
@@ -116,7 +113,6 @@ def _delete_dict_item(table_name, item_id, check_table=None, check_field=None):
         return jsonify({"code": 500, "message": f"删除失败: {str(e)}"}), 500
     finally:
         cursor.close()
-        db.close()
 
 
 # ==================== 环境类型字典接口 ====================

@@ -31,10 +31,12 @@ import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength } from '@/utils/validators'
 
 const router = useRouter()
 const userStore = useUserStore()
+/** @type {any} */
 const formRef = ref(null)
 const loading = ref(false)
 

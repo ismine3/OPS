@@ -49,17 +49,19 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import type { FormItemRule, FormInstance } from 'element-plus'
 import { changePassword } from '../api/auth'
 import { useUserStore } from '../stores/user'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { maxLength, passwordStrength } from '@/utils/validators'
 
 const router = useRouter()
 const userStore = useUserStore()
-const formRef = ref(null)
+const formRef = ref<FormInstance | null>(null)
 const submitLoading = ref(false)
 
 const form = reactive({
@@ -68,7 +70,7 @@ const form = reactive({
   confirm_password: ''
 })
 
-const validateConfirmPassword = (rule, value, callback) => {
+const validateConfirmPassword = (_rule: FormItemRule, value: string, callback: (error?: Error) => void) => {
   if (value === '') {
     callback(new Error('请再次输入新密码'))
   } else if (value !== form.new_password) {

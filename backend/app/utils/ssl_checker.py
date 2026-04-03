@@ -181,12 +181,10 @@ def scan_aliyun_certs(access_key_id: str, access_key_secret: str, account_name: 
     certs = []
     
     if not ALIYUN_SDK_AVAILABLE:
-        logger.error("阿里云SDK未安装，无法扫描阿里云证书")
-        return certs
-    
+        raise RuntimeError("阿里云SDK未安装")
+
     if not access_key_id or not access_key_secret:
-        logger.error("阿里云AccessKey不能为空")
-        return certs
+        raise ValueError("阿里云AccessKey不能为空")
     
     try:
         # 创建阿里云客户端配置
@@ -298,8 +296,9 @@ def scan_aliyun_certs(access_key_id: str, access_key_secret: str, account_name: 
         return certs
         
     except Exception as e:
-        logger.error(f"扫描阿里云证书失败: {type(e).__name__}: {str(e)}")
-        return certs
+        error_msg = f"扫描阿里云证书失败: {type(e).__name__}: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def send_wechat_notification(webhook_url: str, certs: List[Dict]) -> bool:

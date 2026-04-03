@@ -6,17 +6,9 @@ from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.operation_log import log_operation
+from ..utils.password_utils import encrypt_data, decrypt_data
 
 aliyun_accounts_bp = Blueprint('aliyun_accounts', __name__, url_prefix='/api/aliyun-accounts')
-
-
-def mask_secret(secret):
-    """对密钥进行脱敏处理，只显示后4位"""
-    if not secret:
-        return ''
-    if len(secret) <= 4:
-        return '*' * len(secret)
-    return '*' * (len(secret) - 4) + secret[-4:]
 
 
 def is_masked_value(value):
@@ -30,9 +22,9 @@ def is_masked_value(value):
 def get_accounts():
     """
     获取阿里云账户列表
-    对 access_key_secret 做脱敏处理（只显示后4位，前面用 * 替代）
+    access_key_secret 字段会解密返回
     
-    返回: {"code": 200, "data": [账户列表]}
+    返回：{"code": 200, "data": [账户列表]}
     """
     db = get_db()
     cursor = db.cursor()
@@ -45,9 +37,13 @@ def get_accounts():
         """)
         accounts = cursor.fetchall()
         
-        # 对密钥进行脱敏处理
+        # 解密 access_key_secret 字段
         for account in accounts:
-            account['access_key_secret'] = mask_secret(account.get('access_key_secret', ''))
+            if account.get('access_key_secret'):
+                try:
+                    account['access_key_secret'] = decrypt_data(account['access_key_secret'])
+                except:
+                    pass  # 解密失败保持原值
         
         return jsonify({
             'code': 200,
@@ -55,8 +51,6 @@ def get_accounts():
         }), 200
     finally:
         cursor.close()
-        db.close()
-
 
 @aliyun_accounts_bp.route('', methods=['POST'])
 @jwt_required
@@ -99,11 +93,20 @@ def create_account():
                 'message': '账户名称已存在'
             }), 409
         
+        # 加密 AccessKey Secret
+        try:
+            access_key_secret_encrypted = encrypt_data(access_key_secret)
+        except Exception as e:
+            return jsonify({
+                'code': 500,
+                'message': f'AccessKey Secret 加密失败：{str(e)}'
+            }), 500
+        
         # 创建账户
         cursor.execute("""
             INSERT INTO aliyun_accounts (account_name, access_key_id, access_key_secret, description)
             VALUES (%s, %s, %s, %s)
-        """, (account_name, access_key_id, access_key_secret, description))
+        """, (account_name, access_key_id, access_key_secret_encrypted, description))
         
         db.commit()
         account_id = cursor.lastrowid
@@ -124,8 +127,6 @@ def create_account():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @aliyun_accounts_bp.route('/<int:account_id>', methods=['PUT'])
 @jwt_required
@@ -181,10 +182,17 @@ def update_account(account_id):
             update_fields.append("access_key_id = %s")
             update_values.append(data['access_key_id'])
         
-        # 如果 access_key_secret 传的是脱敏值（包含*）则不更新
+    # 如果 access_key_secret 存在则加密
         if 'access_key_secret' in data and not is_masked_value(data['access_key_secret']):
-            update_fields.append("access_key_secret = %s")
-            update_values.append(data['access_key_secret'])
+            try:
+                update_fields.append("access_key_secret = %s")
+                update_values.append(encrypt_data(data['access_key_secret']))
+            except Exception as e:
+                db.rollback()
+                return jsonify({
+                    'code': 500,
+                    'message': f'AccessKey Secret 加密失败：{str(e)}'
+                }), 500
         
         if 'is_active' in data:
             update_fields.append("is_active = %s")
@@ -221,8 +229,6 @@ def update_account(account_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @aliyun_accounts_bp.route('/<int:account_id>', methods=['DELETE'])
 @jwt_required
@@ -266,4 +272,3 @@ def delete_account(account_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

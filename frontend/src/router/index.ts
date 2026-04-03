@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
+import { useUserStore } from '../stores/user'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
@@ -16,7 +18,6 @@ const routes = [
       { path: 'servers', name: 'Servers', component: () => import('../views/Servers.vue'), meta: { title: '服务器管理' } },
       { path: 'servers/:id', name: 'ServerDetail', component: () => import('../views/ServerDetail.vue'), meta: { title: '服务器详情' } },
       { path: 'services', name: 'Services', component: () => import('../views/Services.vue'), meta: { title: '服务管理' } },
-
       { path: 'apps', name: 'Apps', component: () => import('../views/Apps.vue'), meta: { title: '应用系统' } },
       { path: 'domains', name: 'Domains', component: () => import('../views/Domains.vue'), meta: { title: '域名管理' } },
       { path: 'certs', name: 'Certs', component: () => import('../views/Certs.vue'), meta: { title: '证书管理' } },
@@ -34,12 +35,9 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const token = localStorage.getItem('token')
-  
   if (to.meta.requiresAuth === false) {
-    // 登录页面不需要认证
     if (token && to.path === '/login') {
       next('/dashboard')
     } else {
@@ -48,8 +46,13 @@ router.beforeEach((to, from, next) => {
   } else if (!token) {
     next('/login')
   } else if (to.meta.requiresAdmin) {
-    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    if (userInfo.role === 'admin') {
+    const userStore = useUserStore()
+    try {
+      await userStore.fetchProfile()
+    } catch {
+      /* 401 由 axios 拦截器处理 */
+    }
+    if (userStore.isAdmin) {
       next()
     } else {
       next('/dashboard')

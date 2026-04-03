@@ -159,8 +159,15 @@
     <!-- 阿里云同步弹窗 -->
     <el-dialog v-model="syncDialogVisible" title="阿里云同步" width="450px" destroy-on-close>
       <el-form ref="syncFormRef" :model="syncForm" :rules="syncRules" label-width="120px">
-        <el-form-item label="阿里云账户ID" prop="account_id">
-          <el-input-number v-model="syncForm.account_id" :min="1" placeholder="请输入阿里云账户ID" style="width: 100%" />
+        <el-form-item label="阿里云账户" prop="accountIds">
+          <el-select v-model="syncForm.accountIds" placeholder="请选择阿里云账户（支持多选）" style="width: 100%" filterable multiple collapse-tags>
+            <el-option
+              v-for="item in aliyunAccountList"
+              :key="item.id"
+              :label="item.account_name"
+              :value="item.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -176,6 +183,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Bell } from '@element-plus/icons-vue'
 import { getDomains, createDomain, updateDomain, deleteDomain, syncAliyunDomains, notifyDomains } from '../api/domains'
+import { getAliyunAccounts } from '../api/aliyunAccounts'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { domainValidator, safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
@@ -187,7 +196,9 @@ const dialogVisible = ref(false)
 const syncDialogVisible = ref(false)
 const dialogTitle = ref('新增域名')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
+/** @type {any} */
 const syncFormRef = ref(null)
 
 const searchParams = reactive({
@@ -213,8 +224,11 @@ const form = reactive({
 })
 
 const syncForm = reactive({
-  account_id: null
+  accountIds: []
 })
+
+/** @type {import('vue').Ref<any[]>} */
+const aliyunAccountList = ref([])
 
 const rules = {
   domain_name: [
@@ -243,7 +257,13 @@ const rules = {
 }
 
 const syncRules = {
-  account_id: [{ required: true, message: '请输入阿里云账户ID', trigger: 'blur' }]
+  accountIds: [{ 
+    required: true, 
+    type: 'array',
+    min: 1,
+    message: '请选择至少一个阿里云账户', 
+    trigger: 'change' 
+  }]
 }
 
 onMounted(() => {
@@ -281,9 +301,15 @@ function handleReset() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = key === 'cost' ? 0 : ''
-  })
+  form.domain_name = ''
+  form.registrar = ''
+  form.registration_date = ''
+  form.expire_date = ''
+  form.owner = ''
+  form.dns_server = ''
+  form.status = ''
+  form.cost = 0
+  form.remark = ''
 }
 
 function handleAdd() {
@@ -293,6 +319,9 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑域名'
   editingId.value = row.id
@@ -320,6 +349,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除域名 "${row.domain_name}" 吗？`, '提示', {
     type: 'warning',
@@ -332,9 +364,18 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
-function handleSync() {
-  syncForm.account_id = null
+async function handleSync() {
+  syncForm.accountIds = []
   syncDialogVisible.value = true
+  // 在弹窗打开时加载账户列表
+  try {
+    const res = await getAliyunAccounts()
+    aliyunAccountList.value = res.data || []
+  } catch (e) {
+    // @ts-ignore
+    console.error('获取阿里云账户列表失败:', e)
+    aliyunAccountList.value = []
+  }
 }
 
 async function handleSyncSubmit() {
@@ -343,8 +384,20 @@ async function handleSyncSubmit() {
 
   syncLoading.value = true
   try {
-    await syncAliyunDomains(syncForm.account_id)
-    ElMessage.success('同步成功')
+    const results = await Promise.allSettled(
+      syncForm.accountIds.map(id => syncAliyunDomains(id))
+    )
+    const succeeded = results.filter(r => r.status === 'fulfilled')
+    const failed = results.filter(r => r.status === 'rejected')
+
+    if (failed.length === 0) {
+      ElMessage.success(`同步成功，共同步 ${succeeded.length} 个账户`)
+    } else if (succeeded.length === 0) {
+      ElMessage.error('所有账户同步失败')
+    } else {
+      ElMessage.warning(`${succeeded.length} 个账户同步成功，${failed.length} 个失败`)
+    }
+
     syncDialogVisible.value = false
     fetchData()
   } finally {
@@ -362,6 +415,7 @@ async function handleNotify() {
       ElMessage.info('没有需要预警的域名')
     }
   } catch (e) {
+    // @ts-ignore
     ElMessage.error(e.response?.data?.message || '通知发送失败')
   } finally {
     notifyLoading.value = false
@@ -369,16 +423,22 @@ async function handleNotify() {
 }
 
 // 计算剩余天数
+/**
+ * @param {any} expireDate
+ */
 function getRemainingDays(expireDate) {
   if (!expireDate) return '-'
   const today = new Date()
   const expire = new Date(expireDate)
-  const diffTime = expire - today
+  const diffTime = expire.getTime() - today.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   return diffDays
 }
 
 // 根据剩余天数获取标签类型
+/**
+ * @param {any} expireDate
+ */
 function getRemainingDaysTagType(expireDate) {
   const days = getRemainingDays(expireDate)
   if (days === '-') return 'info'
@@ -389,8 +449,12 @@ function getRemainingDaysTagType(expireDate) {
 }
 
 // 根据状态获取标签类型
+/**
+ * @param {any} status
+ */
 function getStatusTagType(status) {
   // 支持数字和中文两种格式
+  /** @type {Record<string, string>} */
   const statusMap = {
     '正常': 'success',
     '即将过期': 'warning',
@@ -406,7 +470,11 @@ function getStatusTagType(status) {
 }
 
 // 状态显示文本转换
+/**
+ * @param {any} status
+ */
 function getStatusText(status) {
+  /** @type {Record<string, string>} */
   const textMap = {
     '正常': '正常',
     '即将过期': '即将过期',
@@ -422,6 +490,9 @@ function getStatusText(status) {
 }
 
 // 格式化费用
+/**
+ * @param {any} cost
+ */
 function formatCost(cost) {
   if (cost === null || cost === undefined) return '-'
   return `¥${Number(cost).toFixed(2)}`

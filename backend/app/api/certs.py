@@ -231,8 +231,6 @@ def get_certs():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('', methods=['POST'])
 @jwt_required
@@ -315,8 +313,6 @@ def create_cert():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/upload', methods=['POST'])
 @jwt_required
@@ -463,8 +459,6 @@ def upload_and_create_cert():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>', methods=['PUT'])
 @jwt_required
@@ -546,8 +540,6 @@ def update_cert(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>', methods=['DELETE'])
 @jwt_required
@@ -585,8 +577,6 @@ def delete_cert(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/check', methods=['POST'])
 @jwt_required
@@ -711,8 +701,6 @@ def batch_check_certs():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/check/<int:cert_id>', methods=['POST'])
 @jwt_required
@@ -803,8 +791,6 @@ def check_single_cert(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/sync-aliyun', methods=['POST'])
 @jwt_required
@@ -823,7 +809,7 @@ def sync_aliyun_certs():
         if not account_id:
             return jsonify({'code': 400, 'message': 'account_id不能为空'}), 400
         
-        # 获取阿里云账号信息
+        # 获取阿里云账号信息（需要解密 access_key_secret）
         cursor.execute(
             "SELECT account_name, access_key_id, access_key_secret FROM aliyun_accounts WHERE id = %s AND is_active = 1",
             (account_id,)
@@ -833,12 +819,29 @@ def sync_aliyun_certs():
         if not account:
             return jsonify({'code': 404, 'message': '阿里云账号不存在或已禁用'}), 404
         
+        # 解密 AccessKey Secret
+        try:
+            access_key_secret = decrypt_data(account['access_key_secret'])
+        except Exception as e:
+            logger.error(f'AccessKey Secret 解密失败：{e}')
+            return jsonify({
+                'code': 500,
+                'message': f'AccessKey Secret 解密失败：{str(e)}'
+            }), 500
+        
         # 调用阿里云证书扫描
-        aliyun_certs = scan_aliyun_certs(
-            account['access_key_id'],
-            account['access_key_secret'],
-            account['account_name']
-        )
+        try:
+            aliyun_certs = scan_aliyun_certs(
+                account['access_key_id'],
+                access_key_secret,
+                account['account_name']
+            )
+        except Exception as e:
+            logger.error(f'同步阿里云证书异常: {str(e)}')
+            return jsonify({
+                'code': 500,
+                'message': f'同步阿里云证书失败: {str(e)}'
+            }), 200
         
         if not aliyun_certs:
             return jsonify({
@@ -900,12 +903,12 @@ def sync_aliyun_certs():
                 db_cert_id = existing['id']
                 # 无论是否更新元数据，只要缺少证书文件就尝试下载
                 if not existing.get('has_cert_file') and cert_info.get('cert_id'):
-                    logger.info(f"证书已存在但缺少文件，尝试下载: {domain} (cert_id={cert_info['cert_id']})")
+                    logger.info(f"证书已存在但缺少文件，尝试下载：{domain} (cert_id={cert_info['cert_id']})")
                     try:
                         from ..utils.ssl_checker import download_aliyun_cert
                         cert_content = download_aliyun_cert(
                             account['access_key_id'],
-                            account['access_key_secret'],
+                            access_key_secret,
                             cert_info['cert_id']
                         )
                         if cert_content:
@@ -971,7 +974,7 @@ def sync_aliyun_certs():
                     from ..utils.ssl_checker import download_aliyun_cert
                     cert_content = download_aliyun_cert(
                         account['access_key_id'],
-                        account['access_key_secret'],
+                        access_key_secret,
                         cert_info['cert_id']
                     )
                     if cert_content:
@@ -1028,8 +1031,6 @@ def sync_aliyun_certs():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/notify', methods=['POST'])
 @jwt_required
@@ -1097,8 +1098,6 @@ def trigger_notify():
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>/upload', methods=['POST'])
 @jwt_required
@@ -1189,8 +1188,6 @@ def upload_cert_files(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>/download', methods=['GET'])
 @jwt_required
@@ -1246,8 +1243,6 @@ def download_cert_files(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>/files', methods=['DELETE'])
 @jwt_required
@@ -1302,8 +1297,6 @@ def delete_cert_files(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
-
 
 @certs_bp.route('/<int:cert_id>/deploy', methods=['POST'])
 @jwt_required
@@ -1322,6 +1315,12 @@ def deploy_cert(cert_id):
         server_id = data.get('server_id')
         remote_path = data.get('remote_path', '/etc/nginx/ssl/')
         ssh_user_type = data.get('ssh_user', 'root')  # root 或 docker
+        ssh_ip_type = data.get('ssh_ip_type', 'inner')  # 可选值: inner, mapped, public
+        ssh_port = data.get('ssh_port', 22)  # 默认22
+
+        # 端口参数验证
+        if not isinstance(ssh_port, int) or ssh_port < 1 or ssh_port > 65535:
+            return jsonify({'code': 400, 'message': 'SSH端口范围应为1-65535'}), 200
 
         if not server_id:
             return jsonify({'code': 400, 'message': 'server_id不能为空'}), 400
@@ -1341,13 +1340,24 @@ def deploy_cert(cert_id):
 
         # 查询服务器信息
         cursor.execute("""
-            SELECT inner_ip, os_user, os_password, docker_user, docker_password
+            SELECT inner_ip, mapped_ip, public_ip, os_user, os_password, docker_user, docker_password
             FROM servers WHERE id = %s
         """, (server_id,))
         server = cursor.fetchone()
 
         if not server:
             return jsonify({'code': 404, 'message': '服务器不存在'}), 404
+
+        # 根据IP类型选择对应IP
+        ip_map = {
+            'inner': server.get('inner_ip'),
+            'mapped': server.get('mapped_ip'),
+            'public': server.get('public_ip'),
+        }
+        ssh_host = ip_map.get(ssh_ip_type) or server.get('inner_ip')
+
+        if not ssh_host:
+            return jsonify({'code': 400, 'message': f'所选服务器的{ssh_ip_type}IP为空'}), 200
 
         # 根据 ssh_user_type 选择用户名和密码
         if ssh_user_type == 'docker':
@@ -1381,7 +1391,8 @@ def deploy_cert(cert_id):
 
         try:
             ssh.connect(
-                hostname=server['inner_ip'],
+                hostname=ssh_host,
+                port=int(ssh_port),
                 username=ssh_username,
                 password=ssh_password,
                 timeout=30
@@ -1389,7 +1400,7 @@ def deploy_cert(cert_id):
         except Exception as e:
             return jsonify({
                 'code': 500,
-                'message': f'SSH连接失败(用户: {ssh_username}): {str(e)}'
+                'message': f'SSH连接失败(用户: {ssh_username}, IP: {ssh_host}, 端口: {ssh_port}): {str(e)}'
             }), 500
 
         # 使用 SFTP 上传文件
@@ -1404,9 +1415,9 @@ def deploy_cert(cert_id):
                 ssh.exec_command(f'mkdir -p {remote_path}')
 
             # 构建远程文件名
-            domain = cert['domain'].replace('.', '_').replace('*', 'wildcard')
-            remote_cert_path = os.path.join(remote_path, f"{domain}_cert.pem")
-            remote_key_path = os.path.join(remote_path, f"{domain}_key.pem")
+            safe_domain = _domain_filename(cert['domain'])
+            remote_cert_path = os.path.join(remote_path, f"{safe_domain}.pem")
+            remote_key_path = os.path.join(remote_path, f"{safe_domain}.key")
 
             # 上传证书文件
             sftp.put(cert['cert_file_path'], remote_cert_path)
@@ -1443,8 +1454,9 @@ def deploy_cert(cert_id):
 
             # 记录操作日志
             log_operation(module='证书管理', action='deploy', target_id=cert_id, target_name=cert['domain'],
-                         detail={'ssh_user': ssh_username, 'remote_path': remote_path, 'server_ip': server['inner_ip'], 
-                                 'verify_success': verify_success, 'errors': verify_errors if verify_errors else None})
+                         detail={'ssh_user': ssh_username, 'remote_path': remote_path, 'server_ip': ssh_host,
+                                 'ssh_port': ssh_port, 'verify_success': verify_success,
+                                 'errors': verify_errors if verify_errors else None})
 
             if not verify_success:
                 return jsonify({
@@ -1476,4 +1488,3 @@ def deploy_cert(cert_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

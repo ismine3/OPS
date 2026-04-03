@@ -1,7 +1,12 @@
-version: '3.8'
+# 环境变量已直接写在本文件中（不使用根目录 .env）。
+# 生产环境请修改 SECRET_KEY、JWT_SECRET_KEY、DATA_ENCRYPTION_KEY、数据库口令等敏感项。
+#
+# 若使用 Cloudflare 且源站仅开放本 compose 的 80 端口：面板 SSL 请选「灵活」(Flexible)，
+# 否则 CF 用 HTTPS 回源而源站无 443 证书时会出现 502。
+
+version: "3.8"
 
 services:
-  # MySQL 数据库服务
   mysql:
     image: mysql:8.0
     container_name: ops-mysql
@@ -13,8 +18,6 @@ services:
       MYSQL_COLLATION: utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      # 注意：MySQL初始化目录通常用于SQL脚本
-      # 如需执行Python初始化，请在backend服务启动时处理
     ports:
       - "3306:3306"
     networks:
@@ -24,7 +27,6 @@ services:
       timeout: 20s
       retries: 10
 
-  # 后端 API 服务
   backend:
     build:
       context: ./backend
@@ -32,16 +34,27 @@ services:
     container_name: ops-backend
     restart: unless-stopped
     environment:
-      - FLASK_HOST=0.0.0.0
-      - FLASK_PORT=5000
-      - FLASK_DEBUG=false
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_USER=root
-      - DB_PASSWORD=Pass1234.
-      - DB_NAME=ops_platform
-      - SECRET_KEY=${SECRET_KEY:-ops-platform-secret-key-change-in-prod}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-secret-key-change-in-prod}
+      FLASK_HOST: "0.0.0.0"
+      FLASK_PORT: "5000"
+      FLASK_DEBUG: "false"
+      SECRET_KEY: "3e5f346fcb9f114056412edefad6d26a4553c133818cdda22b795b2183648c40"
+      JWT_SECRET_KEY: "637cabcec1b41df5164d0b0dd720eefe7594301cbdbbceba441620fe84f4d0df"
+      JWT_EXPIRATION_HOURS: "24"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: Pass1234.
+      DB_NAME: ops_platform
+      CORS_ORIGINS: "http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,https://opm.pepsikey.online"
+      CORS_ALLOW_ALL: "false"
+      DATA_ENCRYPTION_KEY: "O1VNkxEKDSm7lJ_hBFODcMYRO5RCa_KmYlYVv2Bq7Oc="
+      OPS_DEV_ENCRYPTION_FALLBACK: "false"
+      WECHAT_WEBHOOK_URL: ""
+      SSL_CHECK_TIMEOUT: "10"
+      SSL_WARNING_DAYS: "30"
+      DOMAIN_WARNING_DAYS: "30"
+      CERT_AUTO_CHECK_CRON: "0 8 * * *"
+      DOMAIN_AUTO_NOTIFY_CRON: "0 8 * * *"
     volumes:
       - ./backend/app/uploads:/app/app/uploads
     ports:
@@ -51,8 +64,19 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
 
-  # 前端 Nginx 服务
   frontend:
     image: nginx:alpine
     container_name: ops-frontend
@@ -65,7 +89,8 @@ services:
     networks:
       - ops-network
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   mysql_data:

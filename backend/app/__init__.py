@@ -1,13 +1,49 @@
+import logging
+import sys
+
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from .config import Config
 from .utils.db import close_db
 
 
+def _configure_logging(app):
+    """将日志打到 stderr，便于 Docker / Gunicorn 收集；否则 pymysql 等异常可能看不见。"""
+    level = logging.DEBUG if app.config.get("DEBUG") else logging.INFO
+    root = logging.getLogger()
+    if not root.handlers:
+        h = logging.StreamHandler(sys.stderr)
+        h.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        root.addHandler(h)
+    root.setLevel(level)
+    logging.getLogger("pymysql").setLevel(logging.WARNING)
+    app.logger.setLevel(level)
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    
+    _configure_logging(app)
+
+    # 设置 JSON 响应中保留中文字符，不进行 Unicode 转义
+    app.json.ensure_ascii = False
+
+    if not app.config.get("SECRET_KEY"):
+        if app.config.get("DEBUG"):
+            app.config["SECRET_KEY"] = "dev-only-secret-key-not-for-production"
+        else:
+            raise RuntimeError("生产环境必须设置环境变量 SECRET_KEY")
+    if not app.config.get("JWT_SECRET_KEY"):
+        if app.config.get("DEBUG"):
+            app.config["JWT_SECRET_KEY"] = app.config["SECRET_KEY"]
+        else:
+            raise RuntimeError("生产环境必须设置环境变量 JWT_SECRET_KEY")
+
     # 设置请求体大小限制 (16MB)
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
@@ -25,22 +61,55 @@ def create_app():
         if key.isupper():
             app.config[key] = getattr(Config, key)
     
-    # CORS配置
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    # CORS：默认显式源列表 + credentials；CORS_ALLOW_ALL=true 时任意源（不启用 credentials）
+    if app.config.get("CORS_ALLOW_ALL"):
+        CORS(app, resources={r"/api/*": {"origins": "*"}})
+    else:
+        origins = Config.get_cors_origins_list()
+        if not origins:
+            origins = ["http://127.0.0.1:3000"]
+        CORS(
+            app,
+            resources={
+                r"/api/*": {
+                    "origins": origins,
+                    "supports_credentials": True,
+                    "allow_headers": ["Content-Type", "Authorization"],
+                }
+            },
+        )
     
     # 注册蓝图（后续任务会添加更多蓝图）
     register_blueprints(app)
-    
-    # 初始化定时任务调度器
-    from .utils.scheduler import init_scheduler
-    init_scheduler(app)
-    
-    # 请求上下文处理（如需要可在此添加全局逻辑）
-    # JWT认证统一使用 @jwt_required 装饰器，避免重复验证
-    
+
     # 注册数据库连接关闭钩子
     app.teardown_appcontext(close_db)
-    
+
+    # 先校验数据库：连接失败时打印完整异常栈（含 host/port/user/database），再跑迁移与调度器
+    with app.app_context():
+        from .utils.db import get_db, log_database_target
+        from .utils.schema import ensure_schema
+
+        log_database_target(app.config)
+        try:
+            db = get_db()
+            with db.cursor() as cur:
+                cur.execute("SELECT 1")
+            app.logger.info("数据库连接预检成功 (SELECT 1)")
+        except Exception:
+            app.logger.exception(
+                "数据库连接预检失败：请核对环境变量 DB_HOST、DB_PORT、DB_USER、DB_PASSWORD、DB_NAME "
+                "及 MySQL 是否已启动、网络是否互通（Docker 内 DB_HOST 一般为服务名 mysql）"
+            )
+            raise
+
+        ensure_schema()
+
+    # 初始化定时任务调度器（独立连接；失败仅记录日志，不阻止应用启动）
+    from .utils.scheduler import init_scheduler
+
+    init_scheduler(app)
+
     return app
 
 

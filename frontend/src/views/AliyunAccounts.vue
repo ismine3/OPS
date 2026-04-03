@@ -14,7 +14,11 @@
       <el-table :data="tableData" stripe v-loading="loading" style="width: 100%">
         <el-table-column prop="account_name" label="账户名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="access_key_id" label="AccessKey ID" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="access_key_secret" label="AccessKey Secret" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="access_key_secret" label="AccessKey Secret" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <PasswordDisplay :password="row.access_key_secret" />
+          </template>
+        </el-table-column>
         <el-table-column prop="is_active" label="状态" min-width="80">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">
@@ -70,6 +74,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAliyunAccounts, createAliyunAccount, updateAliyunAccount, deleteAliyunAccount } from '../api/aliyunAccounts'
+import PasswordDisplay from '../components/PasswordDisplay.vue'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength } from '@/utils/validators'
 
 const loading = ref(false)
@@ -78,7 +84,7 @@ const tableData = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增账户')
 const editingId = ref(null)
-const formRef = ref(null)
+const formRef = ref(/** @type {any} */(null))
 
 const searchParams = reactive({})
 
@@ -125,9 +131,11 @@ async function fetchData() {
 }
 
 function resetForm() {
-  Object.keys(form).forEach(key => {
-    form[key] = key === 'is_active' ? true : ''
-  })
+  form.account_name = ''
+  form.access_key_id = ''
+  form.access_key_secret = ''
+  form.is_active = true
+  form.description = ''
 }
 
 function handleAdd() {
@@ -137,6 +145,7 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/** @param {any} row */
 function handleEdit(row) {
   dialogTitle.value = '编辑账户'
   editingId.value = row.id
@@ -154,6 +163,7 @@ async function handleSubmit() {
     
     // 编辑时如果 access_key_secret 包含 *（脱敏值），提交时不传该字段
     if (editingId.value && submitData.access_key_secret && submitData.access_key_secret.includes('*')) {
+      // @ts-ignore
       delete submitData.access_key_secret
     }
     
@@ -178,6 +188,7 @@ async function handleSubmit() {
   }
 }
 
+/** @param {any} row */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除账户 "${row.account_name}" 吗？`, '提示', {
     type: 'warning',

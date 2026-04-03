@@ -139,6 +139,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled } from '@element-plus/icons-vue'
 import { getTasks, createTask, updateTask, deleteTask, toggleTask, runTask, getTaskLogs } from '../api/tasks'
+// @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, cronValidator, isSafeSearch } from '@/utils/validators'
 
 const loading = ref(false)
@@ -150,7 +151,9 @@ const logDrawerVisible = ref(false)
 const detailDialogVisible = ref(false)
 const dialogTitle = ref('新增任务')
 const editingId = ref(null)
+/** @type {any} */
 const formRef = ref(null)
+/** @type {any} */
 const uploadRef = ref(null)
 const currentTaskId = ref(null)
 const currentTaskName = ref('')
@@ -213,9 +216,10 @@ function handleReset() {
 }
 
 function resetFormData() {
-  Object.keys(form).forEach(key => {
-    form[key] = key === 'script_file' ? null : ''
-  })
+  form.name = ''
+  form.description = ''
+  form.cron_expression = ''
+  form.script_file = null
 }
 
 function handleAdd() {
@@ -228,6 +232,9 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleEdit(row) {
   dialogTitle.value = '编辑任务'
   editingId.value = row.id
@@ -241,6 +248,9 @@ function handleEdit(row) {
   dialogVisible.value = true
 }
 
+/**
+ * @param {any} file
+ */
 function handleFileChange(file) {
   form.script_file = file.raw
 }
@@ -282,6 +292,9 @@ async function handleSubmit() {
   }
 }
 
+/**
+ * @param {any} row
+ */
 async function handleToggle(row) {
   try {
     await toggleTask(row.id)
@@ -292,6 +305,9 @@ async function handleToggle(row) {
   }
 }
 
+/**
+ * @param {any} row
+ */
 async function handleRun(row) {
   try {
     await runTask(row.id)
@@ -301,6 +317,9 @@ async function handleRun(row) {
   }
 }
 
+/**
+ * @param {any} row
+ */
 async function handleViewLogs(row) {
   currentTaskId.value = row.id
   currentTaskName.value = row.name
@@ -311,19 +330,26 @@ async function handleViewLogs(row) {
 async function fetchLogs() {
   logLoading.value = true
   try {
-    const res = await getTaskLogs(currentTaskId.value)
+    const res = await getTaskLogs(currentTaskId.value, {})
     logData.value = res.data || []
   } finally {
     logLoading.value = false
   }
 }
 
+/**
+ * @param {any} content
+ * @param {any} type
+ */
 function showDetail(content, type) {
   detailTitle.value = type
   detailContent.value = content
   detailDialogVisible.value = true
 }
 
+/**
+ * @param {any} row
+ */
 function handleDelete(row) {
   ElMessageBox.confirm(`确定要删除任务 "${row.name}" 吗？`, '提示', {
     type: 'warning',
@@ -336,7 +362,11 @@ function handleDelete(row) {
   }).catch(() => {})
 }
 
+/**
+ * @param {any} status
+ */
 function getStatusTagType(status) {
+  /** @type {Record<string, string>} */
   const map = {
     'success': 'success',
     'failed': 'danger',
@@ -345,7 +375,11 @@ function getStatusTagType(status) {
   return map[status] || 'info'
 }
 
+/**
+ * @param {any} status
+ */
 function getStatusText(status) {
+  /** @type {Record<string, string>} */
   const map = {
     'success': '成功',
     'failed': '失败',

@@ -104,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, UserFilled, Link, Key, List } from '@element-plus/icons-vue'
@@ -125,6 +125,13 @@ const activeMenu = computed(() => {
 
 const currentTitle = computed(() => route.meta.title || '仪表盘')
 
+onMounted(() => {
+  userStore.fetchProfile()
+})
+
+/**
+ * @param {any} command
+ */
 function handleCommand(command) {
   if (command === 'password') {
     router.push('/change-password')
@@ -144,6 +151,7 @@ function handleCommand(command) {
 async function handleExport() {
   try {
     const res = await exportExcel()
+    // @ts-ignore
     const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')

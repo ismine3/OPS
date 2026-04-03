@@ -7,19 +7,13 @@ from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.operation_log import log_operation
 from ..utils.scheduler import (
-    add_task_to_scheduler, 
+    add_task_to_scheduler,
     remove_task_from_scheduler,
     get_scheduler_db_config,
-    execute_script
 )
+from ..utils.script_runner import assert_allowed_script, run_script_file
 
-tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
-
-
-def allowed_file(filename):
-    """检查文件扩展名是否允许"""
-    ALLOWED_EXTENSIONS = {'py', 'sh', 'sql'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+tasks_bp = Blueprint("tasks", __name__, url_prefix="/api/tasks")
 
 
 def get_script_upload_path():
@@ -58,7 +52,6 @@ def get_tasks():
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('', methods=['POST'])
@@ -80,10 +73,14 @@ def create_task():
     if 'script' not in request.files:
         return jsonify({'code': 400, 'message': '请上传脚本文件'}), 400
     
-    script_file = request.files['script']
-    if script_file.filename == '':
-        return jsonify({'code': 400, 'message': '请选择脚本文件'}), 400
-    
+    script_file = request.files["script"]
+    if script_file.filename == "":
+        return jsonify({"code": 400, "message": "请选择脚本文件"}), 400
+    try:
+        assert_allowed_script(script_file.filename)
+    except ValueError as e:
+        return jsonify({"code": 400, "message": str(e)}), 400
+
     # 保存脚本文件
     scripts_dir = get_script_upload_path()
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -137,7 +134,6 @@ def create_task():
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
@@ -170,11 +166,15 @@ def update_task(task_id):
         # 如果上传了新脚本文件
         if 'script' in request.files:
             script_file = request.files['script']
-            if script_file.filename != '':
+            if script_file.filename != "":
+                try:
+                    assert_allowed_script(script_file.filename)
+                except ValueError as e:
+                    return jsonify({"code": 400, "message": str(e)}), 400
                 # 删除旧文件
                 if script_path and os.path.exists(script_path):
                     os.remove(script_path)
-                
+
                 # 保存新文件
                 scripts_dir = get_script_upload_path()
                 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -213,7 +213,6 @@ def update_task(task_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
@@ -264,7 +263,6 @@ def delete_task(task_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('/<int:task_id>/toggle', methods=['POST'])
@@ -316,7 +314,6 @@ def toggle_task(task_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('/<int:task_id>/run', methods=['POST'])
@@ -335,94 +332,97 @@ def run_task(task_id):
         if not task:
             return jsonify({'code': 404, 'message': '任务不存在'}), 404
         
-        if not task['script_path'] or not os.path.exists(task['script_path']):
-            return jsonify({'code': 400, 'message': '脚本文件不存在'}), 400
-        
-        # 在新线程中执行脚本
+        if not task["script_path"] or not os.path.exists(task["script_path"]):
+            return jsonify({"code": 400, "message": "脚本文件不存在"}), 400
+
         db_config = get_scheduler_db_config()
-        if db_config:
-            # 创建手动执行的日志记录
-            start_time = datetime.datetime.now()
-            cursor.execute("""
-                INSERT INTO task_logs (task_id, status, start_time, triggered_by)
-                VALUES (%s, %s, %s, %s)
-            """, (task_id, 'running', start_time, 'manual'))
-            db.commit()
-            log_id = cursor.lastrowid
-            
-            # 在新线程中执行
-            def run_manual():
-                import subprocess
-                import pymysql
-                
+        if not db_config:
+            return (
+                jsonify(
+                    {
+                        "code": 503,
+                        "message": "任务调度服务未就绪，请稍后重试或重启后端服务",
+                    }
+                ),
+                503,
+            )
+
+        start_time = datetime.datetime.now()
+        cursor.execute(
+            """
+            INSERT INTO task_logs (task_id, status, start_time, triggered_by)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (task_id, "running", start_time, "manual"),
+        )
+        db.commit()
+        log_id = cursor.lastrowid
+
+        script_path = task["script_path"]
+        task_id_ref = task_id
+
+        def run_manual():
+            import subprocess
+            import pymysql
+
+            def _finish(status, output=None, error_message=None):
+                end_time = datetime.datetime.now()
+                conn = None
+                cur = None
+                preview = (output or error_message or "")[:500] or None
                 try:
-                    result = subprocess.run(
-                        ['python', task['script_path']],
-                        capture_output=True,
-                        text=True,
-                        timeout=300
-                    )
-                    
-                    end_time = datetime.datetime.now()
-                    
                     conn = pymysql.connect(**db_config)
                     cur = conn.cursor()
-                    
-                    if result.returncode == 0:
-                        status = 'success'
-                        output = result.stdout if result.stdout else '执行成功，无输出'
-                        error_message = None
-                    else:
-                        status = 'failed'
-                        output = result.stdout if result.stdout else ''
-                        error_message = result.stderr if result.stderr else '执行失败'
-                    
-                    cur.execute("""
-                        UPDATE task_logs 
+                    cur.execute(
+                        """
+                        UPDATE task_logs
                         SET status = %s, end_time = %s, output = %s, error_message = %s
                         WHERE id = %s
-                    """, (status, end_time, output, error_message, log_id))
-                    
-                    cur.execute("""
-                        UPDATE scheduled_tasks 
+                        """,
+                        (status, end_time, output, error_message, log_id),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE scheduled_tasks
                         SET last_run_at = %s, last_status = %s, last_output = %s
                         WHERE id = %s
-                    """, (start_time, status, output[:500] if output else None, task_id))
-                    
+                        """,
+                        (start_time, status, preview, task_id_ref),
+                    )
                     conn.commit()
-                    cur.close()
-                    conn.close()
-                    
-                except Exception as e:
-                    end_time = datetime.datetime.now()
-                    try:
-                        conn = pymysql.connect(**db_config)
-                        cur = conn.cursor()
-                        cur.execute("""
-                            UPDATE task_logs 
-                            SET status = %s, end_time = %s, error_message = %s
-                            WHERE id = %s
-                        """, ('failed', end_time, str(e), log_id))
-                        cur.execute("""
-                            UPDATE scheduled_tasks 
-                            SET last_status = %s, last_output = %s
-                            WHERE id = %s
-                        """, ('failed', str(e)[:500], task_id))
-                        conn.commit()
+                finally:
+                    if cur:
                         cur.close()
+                    if conn:
                         conn.close()
-                    except:
-                        pass
-            
-            import threading
-            thread = threading.Thread(target=run_manual)
-            thread.daemon = True
-            thread.start()
-        
-        return jsonify({
-            'code': 200,
-            'message': '任务已开始执行'
-        })
+
+            try:
+                result = run_script_file(script_path, db_config=db_config, timeout=300)
+            except subprocess.TimeoutExpired:
+                _finish("failed", None, "脚本执行超时（超过300秒）")
+                return
+            except (FileNotFoundError, RuntimeError, ValueError) as e:
+                _finish("failed", None, str(e))
+                return
+            except Exception as e:
+                _finish("failed", None, str(e))
+                return
+
+            if result.returncode == 0:
+                out = result.stdout if result.stdout else "执行成功，无输出"
+                _finish("success", out, None)
+            else:
+                out = result.stdout if result.stdout else ""
+                err_msg = result.stderr if result.stderr else "执行失败"
+                _finish("failed", out, err_msg)
+
+        import threading
+
+        thread = threading.Thread(target=run_manual)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({"code": 200, "message": "任务已开始执行"})
     except Exception as e:
         return jsonify({
             'code': 500,
@@ -430,7 +430,6 @@ def run_task(task_id):
         }), 500
     finally:
         cursor.close()
-        db.close()
 
 
 @tasks_bp.route('/<int:task_id>/logs', methods=['GET'])
@@ -467,4 +466,3 @@ def get_task_logs(task_id):
         }), 500
     finally:
         cursor.close()
-        db.close()

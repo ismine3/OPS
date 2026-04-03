@@ -87,4 +87,3 @@ def get_stats():
         })
     finally:
         cursor.close()
-        db.close()

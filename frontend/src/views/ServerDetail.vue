@@ -81,6 +81,7 @@ import PasswordDisplay from '../components/PasswordDisplay.vue'
 
 const route = useRoute()
 const loading = ref(false)
+/** @type {import('vue').Ref<any>} */
 const server = ref(null)
 const services = ref([])
 
@@ -102,7 +103,11 @@ async function fetchData() {
   }
 }
 
+/**
+ * @param {any} env
+ */
 function getEnvTagType(env) {
+  /** @type {Record<string, string>} */
   const map = {
     '生产': 'danger',
     '测试': 'warning',

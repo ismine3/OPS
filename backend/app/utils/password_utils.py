@@ -10,31 +10,43 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 
-# 从环境变量获取加密密钥，如果没有则生成一个（仅用于开发环境）
-ENCRYPTION_KEY = os.environ.get('DATA_ENCRYPTION_KEY')
+# 生产环境必须设置 DATA_ENCRYPTION_KEY（Fernet 的 urlsafe base64 32 字节密钥）。
+# 开发可在 FLASK_DEBUG=true 或 OPS_DEV_ENCRYPTION_FALLBACK=true 时使用内置密钥（切勿用于生产）。
+_DEV_FERNET_KEY = "ySYNdFtSyLpfGr0F9hptEErhTxLUllX5OR7QpZzrjwg="
+
+
+def _resolve_encryption_key_string():
+    raw = os.environ.get("DATA_ENCRYPTION_KEY")
+    if raw:
+        return raw
+    if os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes") or os.environ.get(
+        "OPS_DEV_ENCRYPTION_FALLBACK", ""
+    ).lower() in ("1", "true", "yes"):
+        return _DEV_FERNET_KEY
+    raise ValueError(
+        "未设置 DATA_ENCRYPTION_KEY，无法加解密敏感数据。"
+        "生产环境请配置 Fernet 密钥；本地开发可设置 FLASK_DEBUG=true 或 OPS_DEV_ENCRYPTION_FALLBACK=true（不安全）。"
+    )
+
 
 def _get_fernet():
-    """获取Fernet加密实例"""
-    global ENCRYPTION_KEY
-    if not ENCRYPTION_KEY:
-        # 开发环境：生成临时密钥（生产环境必须使用固定密钥）
-        key = Fernet.generate_key()
-        ENCRYPTION_KEY = key.decode()
-    
-    # 确保密钥是32字节base64编码
-    key_bytes = ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY
-    if len(base64.urlsafe_b64decode(key_bytes + b'=' * (4 - len(key_bytes) % 4))) != 32:
-        # 如果密钥不是32字节，使用PBKDF2派生
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=b'ops-platform-salt',  # 实际使用时应使用随机salt并存储
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(key_bytes))
-        return Fernet(key)
-    
-    return Fernet(key_bytes)
+    """获取 Fernet 实例：支持标准 Fernet 密钥或通过 PBKDF2 从任意字符串派生。"""
+    key_str = _resolve_encryption_key_string()
+    key_bytes = key_str.encode() if isinstance(key_str, str) else key_str
+    try:
+        decoded = base64.urlsafe_b64decode(key_bytes + b"=" * (4 - len(key_bytes) % 4))
+    except Exception:
+        decoded = b""
+    if len(decoded) == 32:
+        return Fernet(key_bytes)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"ops-platform-salt",
+        iterations=100000,
+    )
+    derived = base64.urlsafe_b64encode(kdf.derive(key_bytes))
+    return Fernet(derived)
 
 
 def hash_password(password: str) -> str:

@@ -2,7 +2,7 @@
 用户模型 - 用户相关的数据库操作函数
 """
 from ..utils.db import get_db
-from werkzeug.security import generate_password_hash
+from ..utils.password_utils import hash_password, verify_password
 
 
 def create_user(username, password, display_name, role='operator'):
@@ -18,22 +18,19 @@ def create_user(username, password, display_name, role='operator'):
     Returns:
         新创建的用户ID
     """
-    password_hash = generate_password_hash(password)
+    password_hash = hash_password(password)
     
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO users (username, password_hash, display_name, role, is_active)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (username, password_hash, display_name, role, True)
-            )
-            db.commit()
-            return cursor.lastrowid
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO users (username, password_hash, display_name, role, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (username, password_hash, display_name, role, True)
+        )
+        db.commit()
+        return cursor.lastrowid
 
 
 def get_user_by_username(username):
@@ -47,15 +44,12 @@ def get_user_by_username(username):
         用户字典或None
     """
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM users WHERE username = %s",
-                (username,)
-            )
-            return cursor.fetchone()
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            "SELECT * FROM users WHERE username = %s",
+            (username,)
+        )
+        return cursor.fetchone()
 
 
 def get_user_by_id(user_id):
@@ -69,15 +63,12 @@ def get_user_by_id(user_id):
         用户字典或None
     """
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM users WHERE id = %s",
-                (user_id,)
-            )
-            return cursor.fetchone()
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            "SELECT * FROM users WHERE id = %s",
+            (user_id,)
+        )
+        return cursor.fetchone()
 
 
 def get_all_users():
@@ -88,18 +79,15 @@ def get_all_users():
         用户列表
     """
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT id, username, display_name, role, is_active, created_at, updated_at
-                FROM users
-                ORDER BY created_at DESC
-                """
-            )
-            return cursor.fetchall()
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, username, display_name, role, is_active, created_at, updated_at
+            FROM users
+            ORDER BY created_at DESC
+            """
+        )
+        return cursor.fetchall()
 
 
 def update_user(user_id, data):
@@ -120,19 +108,16 @@ def update_user(user_id, data):
         return False
     
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            set_clause = ', '.join([f"{field} = %s" for field in update_fields.keys()])
-            values = list(update_fields.values()) + [user_id]
-            
-            cursor.execute(
-                f"UPDATE users SET {set_clause} WHERE id = %s",
-                values
-            )
-            db.commit()
-            return cursor.rowcount > 0
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        set_clause = ', '.join([f"{field} = %s" for field in update_fields.keys()])
+        values = list(update_fields.values()) + [user_id]
+        
+        cursor.execute(
+            f"UPDATE users SET {set_clause} WHERE id = %s",
+            values
+        )
+        db.commit()
+        return cursor.rowcount > 0
 
 
 def delete_user(user_id):
@@ -146,16 +131,13 @@ def delete_user(user_id):
         是否删除成功
     """
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                "DELETE FROM users WHERE id = %s",
-                (user_id,)
-            )
-            db.commit()
-            return cursor.rowcount > 0
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM users WHERE id = %s",
+            (user_id,)
+        )
+        db.commit()
+        return cursor.rowcount > 0
 
 
 def update_password(user_id, password_hash):
@@ -170,13 +152,10 @@ def update_password(user_id, password_hash):
         是否更新成功
     """
     db = get_db()
-    try:
-        with db.cursor() as cursor:
-            cursor.execute(
-                "UPDATE users SET password_hash = %s WHERE id = %s",
-                (password_hash, user_id)
-            )
-            db.commit()
-            return cursor.rowcount > 0
-    finally:
-        db.close()
+    with db.cursor() as cursor:
+        cursor.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (password_hash, user_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0

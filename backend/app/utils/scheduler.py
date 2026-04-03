@@ -335,7 +335,7 @@ def auto_cert_check_and_notify(db_config, app_config):
         
         # 查询所有 cert_type=0 的证书域名（在线检测类型）
         cursor.execute("""
-            SELECT id, domain FROM certs 
+            SELECT id, domain FROM ssl_certificates 
             WHERE cert_type = 0 AND domain IS NOT NULL AND domain != ''
         """)
         certs = cursor.fetchall()
@@ -400,7 +400,7 @@ def auto_cert_check_and_notify(db_config, app_config):
                 if cert_info:
                     # 更新数据库
                     cursor.execute("""
-                        UPDATE certs 
+                        UPDATE ssl_certificates 
                         SET cert_expire_time = %s, remaining_days = %s, 
                             last_check_time = %s, updated_at = %s
                         WHERE id = %s
@@ -424,7 +424,7 @@ def auto_cert_check_and_notify(db_config, app_config):
         warning_days = app_config.get('ssl_warning_days', 30)
         cursor.execute("""
             SELECT id, domain, project_name, cert_expire_time, remaining_days
-            FROM certs
+            FROM ssl_certificates
             WHERE cert_type = 0 AND remaining_days IS NOT NULL AND remaining_days <= %s
             ORDER BY remaining_days ASC
         """, (warning_days,))
@@ -443,7 +443,7 @@ def auto_cert_check_and_notify(db_config, app_config):
                 now = datetime.datetime.now()
                 for cert in warning_certs:
                     cursor.execute("""
-                        UPDATE certs 
+                        UPDATE ssl_certificates 
                         SET last_notify_time = %s, notify_status = %s
                         WHERE id = %s
                     """, (now, 'sent' if success else 'failed', cert['id']))

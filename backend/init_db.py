@@ -2,7 +2,7 @@
 数据库初始化脚本 - 创建数据库和表结构
 """
 import pymysql
-from werkzeug.security import generate_password_hash
+from app.utils.password_utils import hash_password
 from app.config import Config
 
 
@@ -34,7 +34,7 @@ def init_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `users` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `username` VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
+        `username` VARCHAR(20) NOT NULL UNIQUE COMMENT '用户名',
         `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希',
         `display_name` VARCHAR(100) NOT NULL COMMENT '显示名称',
         `role` VARCHAR(50) NOT NULL DEFAULT 'operator' COMMENT '角色: admin/operator/viewer',
@@ -52,7 +52,7 @@ def init_database():
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `env_type` VARCHAR(50) NOT NULL COMMENT '环境类型: 测试/生产/智慧环保/水电集团',
         `platform` VARCHAR(100) COMMENT '平台',
-        `hostname` VARCHAR(200) COMMENT '主机名',
+        `hostname` VARCHAR(255) COMMENT '主机名',
         `inner_ip` VARCHAR(100) COMMENT '内网IP',
         `mapped_ip` VARCHAR(100) COMMENT '云平台映射IP',
         `public_ip` VARCHAR(100) COMMENT '互联网IP',
@@ -62,9 +62,9 @@ def init_database():
         `data_disk` VARCHAR(50) COMMENT '数据盘',
         `purpose` VARCHAR(500) COMMENT '用途',
         `os_user` VARCHAR(100) COMMENT '系统账户',
-        `os_password` VARCHAR(200) COMMENT '系统密码',
+        `os_password` VARCHAR(255) COMMENT '系统密码',
         `docker_user` VARCHAR(100) COMMENT '普通用户名',
-        `docker_password` VARCHAR(200) COMMENT '普通用户密码',
+        `docker_password` VARCHAR(255) COMMENT '普通用户密码',
         `remark` TEXT COMMENT '备注',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -134,7 +134,7 @@ def init_database():
         `company` VARCHAR(200) COMMENT '所属单位',
         `access_url` VARCHAR(500) COMMENT '访问地址',
         `username` VARCHAR(100) COMMENT '用户名',
-        `password` VARCHAR(200) COMMENT '密码',
+        `password` VARCHAR(255) COMMENT '密码',
         `remark` TEXT COMMENT '备注',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -209,7 +209,7 @@ def init_database():
     """)
 
     # 插入默认管理员账户
-    admin_password_hash = generate_password_hash('admin123')
+    admin_password_hash = hash_password('admin123')
     cursor.execute("""
     INSERT IGNORE INTO `users` (`username`, `password_hash`, `display_name`, `role`, `is_active`)
     VALUES (%s, %s, %s, %s, %s)

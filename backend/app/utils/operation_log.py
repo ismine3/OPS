@@ -23,6 +23,8 @@ def log_operation(module, action, target_id=None, target_name=None, detail=None,
         user_id: 执行操作的用户ID (可选，用于登录等特殊场景)
         username: 执行操作的用户名 (可选，用于登录等特殊场景)
     """
+    db = None
+    cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
@@ -54,11 +56,13 @@ def log_operation(module, action, target_id=None, target_name=None, detail=None,
         """, (user_id, username, module, action, target_id, target_name, detail_json, ip, user_agent, datetime.now()))
         
         db.commit()
-        cursor.close()
-        db.close()
         
     except Exception as e:
         logger.error(f"记录操作日志失败: {e}")
+    finally:
+        if cursor:
+            cursor.close()
+        # 注意：不在此处关闭db连接，由teardown_appcontext统一处理
 
 
 def log_login(user_id, username, success=True, detail=None):

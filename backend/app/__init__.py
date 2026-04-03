@@ -1,11 +1,15 @@
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from .config import Config
+from .utils.db import close_db
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    
+    # 设置请求体大小限制 (16MB)
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
     # 根路由 - 返回 API 服务状态
     @app.route('/')
@@ -31,22 +35,11 @@ def create_app():
     from .utils.scheduler import init_scheduler
     init_scheduler(app)
     
-    # 在每个请求前解析 JWT token，设置用户信息到 g 对象
-    @app.before_request
-    def load_user_from_token():
-        # 跳过登录相关接口
-        if request.endpoint and 'auth' in request.endpoint:
-            return
-        
-        auth_header = request.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
-            from .utils.auth import verify_token
-            payload = verify_token(token)
-            if payload:
-                g.user_id = payload.get('user_id')
-                g.username = payload.get('username')
-                g.role = payload.get('role')
+    # 请求上下文处理（如需要可在此添加全局逻辑）
+    # JWT认证统一使用 @jwt_required 装饰器，避免重复验证
+    
+    # 注册数据库连接关闭钩子
+    app.teardown_appcontext(close_db)
     
     return app
 

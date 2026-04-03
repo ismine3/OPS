@@ -2,7 +2,7 @@
 认证 API
 """
 from flask import Blueprint, request, jsonify, g
-from werkzeug.security import check_password_hash, generate_password_hash
+from ..utils.password_utils import verify_password, hash_password
 
 from ..models.user import get_user_by_username, update_password
 from ..utils.auth import generate_token
@@ -41,6 +41,9 @@ def login():
     # 查询用户
     user = get_user_by_username(username)
     
+    # 调试日志（如需要可开启）
+    # print(f"DEBUG: 查询用户 {username}, 结果: {user}")
+    
     if not user:
         # 记录登录失败
         log_operation(module='用户认证', action='login_failed', target_name=username, detail={'reason': '用户不存在'}, user_id=None, username=username)
@@ -58,7 +61,7 @@ def login():
         }), 401
     
     # 验证密码
-    if not check_password_hash(user['password_hash'], password):
+    if not verify_password(password, user['password_hash']):
         log_operation(module='用户认证', action='login_failed', target_id=user['id'], target_name=username, detail={'reason': '密码错误'}, user_id=user['id'], username=username)
         return jsonify({
             'code': 401,
@@ -169,14 +172,14 @@ def change_password():
         }), 404
     
     # 验证旧密码
-    if not check_password_hash(user['password_hash'], old_password):
+    if not verify_password(old_password, user['password_hash']):
         return jsonify({
             'code': 400,
             'message': '旧密码错误'
         }), 400
     
     # 更新密码
-    new_password_hash = generate_password_hash(new_password)
+    new_password_hash = hash_password(new_password)
     success = update_password(user_id, new_password_hash)
     
     if success:

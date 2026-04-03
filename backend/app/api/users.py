@@ -3,7 +3,8 @@
 所有接口需要管理员权限
 """
 from flask import Blueprint, request, jsonify, g
-from werkzeug.security import generate_password_hash
+from ..utils.password_utils import hash_password
+from ..utils.validators import validate_username
 
 from ..models.user import (
     create_user, get_all_users, get_user_by_id, 
@@ -59,6 +60,13 @@ def create_new_user():
         return jsonify({
             'code': 400,
             'message': '用户名、密码和显示名称不能为空'
+        }), 400
+    
+    # 验证用户名格式
+    if not validate_username(username):
+        return jsonify({
+            'code': 400,
+            'message': '用户名格式不正确，只能包含字母、数字和下划线，长度3-20位'
         }), 400
     
     # 验证角色
@@ -259,7 +267,7 @@ def reset_user_password(user_id):
         }), 404
     
     try:
-        password_hash = generate_password_hash(new_password)
+        password_hash = hash_password(new_password)
         success = update_password(user_id, password_hash)
         if success:
             # 记录操作日志

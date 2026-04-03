@@ -5,8 +5,45 @@ from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.operation_log import log_operation
+from ..utils.validators import validate_url, validate_string_length
+from ..utils.password_utils import encrypt_data, decrypt_data
 
 apps_bp = Blueprint('apps', __name__, url_prefix='/api/apps')
+
+
+@apps_bp.route('/<int:app_id>', methods=['GET'])
+@jwt_required
+def get_app_detail(app_id):
+    """
+    获取应用系统详情
+    密码字段会被解密返回
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT * FROM app_systems WHERE id = %s", (app_id,))
+        app = cursor.fetchone()
+        
+        if not app:
+            return jsonify({
+                'code': 404,
+                'message': '应用系统不存在'
+            }), 404
+        
+        # 解密密码字段
+        if app.get('password'):
+            try:
+                app['password'] = decrypt_data(app['password'])
+            except:
+                pass  # 解密失败保持原值
+            
+        return jsonify({
+            'code': 200,
+            'data': app
+        })
+    finally:
+        cursor.close()
+        db.close()
 
 
 @apps_bp.route('', methods=['GET'])
@@ -81,12 +118,69 @@ def create_app():
     cursor = db.cursor()
     try:
         data = request.json
+        
+        # 输入验证
+        name = data.get('name')
+        company = data.get('company')
+        access_url = data.get('access_url')
+        username = data.get('username')
+        password = data.get('password')
+        remark = data.get('remark')
+        
+        # 验证必填字段
+        if not name:
+            return jsonify({
+                'code': 400,
+                'message': '应用系统名称不能为空'
+            }), 400
+        
+        # 验证字符串长度
+        if not validate_string_length(name, min_len=1, max_len=200):
+            return jsonify({
+                'code': 400,
+                'message': '应用系统名称长度必须在1-200个字符之间'
+            }), 400
+        
+        if company and not validate_string_length(company, max_len=200):
+            return jsonify({
+                'code': 400,
+                'message': '公司名称长度不能超过200个字符'
+            }), 400
+        
+        # 验证URL格式
+        if access_url and not validate_url(access_url):
+            return jsonify({
+                'code': 400,
+                'message': '访问URL格式不正确'
+            }), 400
+        
+        if username and not validate_string_length(username, max_len=100):
+            return jsonify({
+                'code': 400,
+                'message': '用户名长度不能超过100个字符'
+            }), 400
+        
+        if password and not validate_string_length(password, max_len=255):
+            return jsonify({
+                'code': 400,
+                'message': '密码长度不能超过255个字符'
+            }), 400
+        
+        if remark and not validate_string_length(remark, max_len=500):
+            return jsonify({
+                'code': 400,
+                'message': '备注长度不能超过500个字符'
+            }), 400
+        
+        # 加密密码
+        password_encrypted = encrypt_data(password) if password else None
+        
         cursor.execute(
             "INSERT INTO app_systems (seq_no, name, company, access_url, username, password, remark) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (data.get('seq_no'), data.get('name'), data.get('company'),
-             data.get('access_url'), data.get('username'), data.get('password'),
-             data.get('remark'))
+            (data.get('seq_no'), name, company,
+             access_url, username, password_encrypted,
+             remark)
         )
         db.commit()
         app_id = cursor.lastrowid
@@ -129,8 +223,59 @@ def update_app(app_id):
         data = request.json
         fields = []
         values = []
-        for key in ['seq_no', 'name', 'company', 'access_url', 'username', 'password', 'remark']:
-            if key in data:
+        # 允许的字段白名单，防止SQL注入
+        allowed_fields = ['seq_no', 'name', 'company', 'access_url', 'username', 'password', 'remark']
+        
+        # 输入验证
+        if 'name' in data:
+            name = data['name']
+            if not name:
+                return jsonify({
+                    'code': 400,
+                    'message': '应用系统名称不能为空'
+                }), 400
+            if not validate_string_length(name, min_len=1, max_len=200):
+                return jsonify({
+                    'code': 400,
+                    'message': '应用系统名称长度必须在1-200个字符之间'
+                }), 400
+        
+        if 'company' in data and data['company'] and not validate_string_length(data['company'], max_len=200):
+            return jsonify({
+                'code': 400,
+                'message': '公司名称长度不能超过200个字符'
+            }), 400
+        
+        if 'access_url' in data and data['access_url'] and not validate_url(data['access_url']):
+            return jsonify({
+                'code': 400,
+                'message': '访问URL格式不正确'
+            }), 400
+        
+        if 'username' in data and data['username'] and not validate_string_length(data['username'], max_len=100):
+            return jsonify({
+                'code': 400,
+                'message': '用户名长度不能超过100个字符'
+            }), 400
+        
+        if 'password' in data and data['password'] and not validate_string_length(data['password'], max_len=255):
+            return jsonify({
+                'code': 400,
+                'message': '密码长度不能超过255个字符'
+            }), 400
+        
+        if 'remark' in data and data['remark'] and not validate_string_length(data['remark'], max_len=500):
+            return jsonify({
+                'code': 400,
+                'message': '备注长度不能超过500个字符'
+            }), 400
+        
+        # 处理密码字段加密
+        if 'password' in data and data['password']:
+            data['password'] = encrypt_data(data['password'])
+        
+        for key in data:
+            if key in allowed_fields:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])
         if fields:

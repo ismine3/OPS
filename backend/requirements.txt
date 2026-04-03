@@ -6,6 +6,7 @@ werkzeug>=3.0.0
 apscheduler>=3.10.0
 openpyxl>=3.1.0
 cryptography>=41.0.0
+bcrypt>=4.0.0
 alibabacloud_domain20180129
 alibabacloud_cas20200407
 alibabacloud_tea_openapi

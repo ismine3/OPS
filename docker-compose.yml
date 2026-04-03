@@ -13,7 +13,8 @@ services:
       MYSQL_COLLATION: utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./backend/init_db.py:/docker-entrypoint-initdb.d/init_db.py:ro
+      # 注意：MySQL初始化目录通常用于SQL脚本
+      # 如需执行Python初始化，请在backend服务启动时处理
     ports:
       - "3306:3306"
     networks:

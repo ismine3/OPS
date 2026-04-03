@@ -14,6 +14,7 @@ from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
 from ..utils.ssl_checker import get_ssl_cert_info, scan_aliyun_certs, send_wechat_notification
 from ..utils.operation_log import log_operation
+from ..utils.password_utils import decrypt_data
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
@@ -116,6 +117,38 @@ def _parse_cert_file(cert_content):
 def _domain_filename(domain):
     """将域名转为安全的文件名前缀，如 *.example.com -> _wildcard_.example.com"""
     return domain.replace('*', '_wildcard_')
+
+
+def _validate_cert_id(cert_id):
+    """验证证书ID是否为有效正整数"""
+    try:
+        cert_id_int = int(cert_id)
+        if cert_id_int <= 0:
+            return None
+        return cert_id_int
+    except (ValueError, TypeError):
+        return None
+
+
+def _get_safe_cert_dir(cert_id):
+    """获取安全的证书存储目录路径，防止路径遍历攻击"""
+    cert_id_int = _validate_cert_id(cert_id)
+    if cert_id_int is None:
+        raise ValueError("无效的证书ID")
+    
+    base_dir = current_app.config.get('CERT_FILES_DIR', '')
+    if not base_dir:
+        raise ValueError("未配置证书文件存储目录")
+    
+    # 构建绝对路径并规范化
+    cert_dir = os.path.abspath(os.path.join(base_dir, str(cert_id_int)))
+    base_dir_abs = os.path.abspath(base_dir)
+    
+    # 确保最终路径在基础目录内
+    if not cert_dir.startswith(base_dir_abs):
+        raise ValueError("非法的证书存储路径")
+    
+    return cert_dir
 
 
 @certs_bp.route('', methods=['GET'])
@@ -311,6 +344,27 @@ def upload_and_create_cert():
         if not cert_file:
             return jsonify({'code': 400, 'message': '证书文件(cert_file)不能为空'}), 400
         
+        # 文件大小限制（10MB）
+        max_size = 10 * 1024 * 1024
+        if cert_file.content_length > max_size:
+            return jsonify({'code': 400, 'message': '证书文件大小不能超过10MB'}), 400
+        
+        if key_file and key_file.content_length > max_size:
+            return jsonify({'code': 400, 'message': '私钥文件大小不能超过10MB'}), 400
+        
+        # 文件类型验证
+        allowed_cert_extensions = ['.pem', '.crt', '.cer']
+        allowed_key_extensions = ['.key']
+        
+        cert_filename = cert_file.filename
+        if not any(cert_filename.lower().endswith(ext) for ext in allowed_cert_extensions):
+            return jsonify({'code': 400, 'message': '证书文件只能是 .pem, .crt, .cer 格式'}), 400
+        
+        if key_file:
+            key_filename = key_file.filename
+            if not any(key_filename.lower().endswith(ext) for ext in allowed_key_extensions):
+                return jsonify({'code': 400, 'message': '私钥文件只能是 .key 格式'}), 400
+        
         # 获取表单字段
         project_name = request.form.get('project_name', '').strip()
         brand = request.form.get('brand', '').strip()
@@ -358,7 +412,7 @@ def upload_and_create_cert():
         cert_id = cursor.lastrowid
         
         # 保存证书文件
-        cert_dir = os.path.join(current_app.config.get('CERT_FILES_DIR', ''), str(cert_id))
+        cert_dir = _get_safe_cert_dir(cert_id)
         os.makedirs(cert_dir, exist_ok=True)
         safe_domain = _domain_filename(domain)
         
@@ -1071,8 +1125,29 @@ def upload_cert_files(cert_id):
         if not cert_file:
             return jsonify({'code': 400, 'message': '证书文件(cert_file)不能为空'}), 400
 
+        # 文件大小限制（10MB）
+        max_size = 10 * 1024 * 1024
+        if cert_file.content_length > max_size:
+            return jsonify({'code': 400, 'message': '证书文件大小不能超过10MB'}), 400
+
+        if key_file and key_file.content_length > max_size:
+            return jsonify({'code': 400, 'message': '私钥文件大小不能超过10MB'}), 400
+
+        # 文件类型验证
+        allowed_cert_extensions = ['.pem', '.crt', '.cer']
+        allowed_key_extensions = ['.key']
+
+        cert_filename = cert_file.filename
+        if not any(cert_filename.lower().endswith(ext) for ext in allowed_cert_extensions):
+            return jsonify({'code': 400, 'message': '证书文件只能是 .pem, .crt, .cer 格式'}), 400
+
+        if key_file:
+            key_filename = key_file.filename
+            if not any(key_filename.lower().endswith(ext) for ext in allowed_key_extensions):
+                return jsonify({'code': 400, 'message': '私钥文件只能是 .key 格式'}), 400
+
         # 创建目录
-        cert_dir = os.path.join(current_app.config.get('CERT_FILES_DIR', ''), str(cert_id))
+        cert_dir = _get_safe_cert_dir(cert_id)
         os.makedirs(cert_dir, exist_ok=True)
         safe_domain = _domain_filename(cert['domain'])
 
@@ -1199,7 +1274,7 @@ def delete_cert_files(cert_id):
             return jsonify({'code': 400, 'message': '证书文件不存在'}), 400
 
         # 删除证书目录
-        cert_dir = os.path.join(current_app.config.get('CERT_FILES_DIR', ''), str(cert_id))
+        cert_dir = _get_safe_cert_dir(cert_id)
         if os.path.exists(cert_dir):
             shutil.rmtree(cert_dir)
 
@@ -1277,14 +1352,24 @@ def deploy_cert(cert_id):
         # 根据 ssh_user_type 选择用户名和密码
         if ssh_user_type == 'docker':
             ssh_username = server.get('docker_user') or 'docker'
-            ssh_password = server.get('docker_password')
-            if not ssh_password:
+            ssh_password_encrypted = server.get('docker_password')
+            if not ssh_password_encrypted:
                 return jsonify({'code': 400, 'message': '该服务器未配置普通用户密码'}), 400
+            # 解密密码
+            try:
+                ssh_password = decrypt_data(ssh_password_encrypted)
+            except Exception as e:
+                return jsonify({'code': 500, 'message': f'密码解密失败: {str(e)}'}), 500
         else:
             ssh_username = server.get('os_user') or 'root'
-            ssh_password = server.get('os_password')
-            if not ssh_password:
+            ssh_password_encrypted = server.get('os_password')
+            if not ssh_password_encrypted:
                 return jsonify({'code': 400, 'message': '该服务器未配置系统密码'}), 400
+            # 解密密码
+            try:
+                ssh_password = decrypt_data(ssh_password_encrypted)
+            except Exception as e:
+                return jsonify({'code': 500, 'message': f'密码解密失败: {str(e)}'}), 500
 
         # 检查证书文件是否存在
         if not cert['cert_file_path'] or not os.path.exists(cert['cert_file_path']):
@@ -1332,9 +1417,40 @@ def deploy_cert(cert_id):
 
             sftp.close()
 
+            # 验证部署结果
+            verify_success = True
+            verify_errors = []
+            
+            # 检查证书文件是否存在
+            stdin, stdout, stderr = ssh.exec_command(f'ls -la {remote_cert_path}')
+            if stdout.channel.recv_exit_status() != 0:
+                verify_success = False
+                verify_errors.append(f'证书文件未找到: {remote_cert_path}')
+            
+            # 检查私钥文件是否存在（如果上传了）
+            if cert['key_file_path'] and os.path.exists(cert['key_file_path']):
+                stdin, stdout, stderr = ssh.exec_command(f'ls -la {remote_key_path}')
+                if stdout.channel.recv_exit_status() != 0:
+                    verify_success = False
+                    verify_errors.append(f'私钥文件未找到: {remote_key_path}')
+            
+            # 验证文件内容（检查文件大小是否大于0）
+            stdin, stdout, stderr = ssh.exec_command(f'stat -c %s {remote_cert_path}')
+            cert_size = stdout.read().decode().strip()
+            if not cert_size or int(cert_size) == 0:
+                verify_success = False
+                verify_errors.append('证书文件大小为0')
+
             # 记录操作日志
             log_operation(module='证书管理', action='deploy', target_id=cert_id, target_name=cert['domain'],
-                         detail={'ssh_user': ssh_username, 'remote_path': remote_path, 'server_ip': server['inner_ip']})
+                         detail={'ssh_user': ssh_username, 'remote_path': remote_path, 'server_ip': server['inner_ip'], 
+                                 'verify_success': verify_success, 'errors': verify_errors if verify_errors else None})
+
+            if not verify_success:
+                return jsonify({
+                    'code': 500,
+                    'message': f'部署验证失败: {"; ".join(verify_errors)}'
+                }), 500
 
             return jsonify({
                 'code': 200,

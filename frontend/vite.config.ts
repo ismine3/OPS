@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
   const target = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000'
 
   return {
+    base: '/',
     plugins: [vue()],
     resolve: {
       alias: {

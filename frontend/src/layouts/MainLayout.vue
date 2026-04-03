@@ -19,6 +19,10 @@
           <el-icon><Odometer /></el-icon>
           <template #title>仪表盘</template>
         </el-menu-item>
+        <el-menu-item index="/monitoring">
+          <el-icon><DataLine /></el-icon>
+          <template #title>监控中心</template>
+        </el-menu-item>
         <el-menu-item index="/servers">
           <el-icon><Monitor /></el-icon>
           <template #title>服务器管理</template>

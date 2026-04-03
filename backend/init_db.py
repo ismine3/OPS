@@ -67,6 +67,7 @@ def init_database():
         `docker_user` VARCHAR(100) COMMENT '普通用户名',
         `docker_password` VARCHAR(255) COMMENT '普通用户密码',
         `remark` TEXT COMMENT '备注',
+        `cert_path` VARCHAR(255) DEFAULT NULL COMMENT '证书路径',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX `idx_env_type` (`env_type`),

@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard',
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
+      { path: 'monitoring', name: 'Monitoring', component: () => import('../views/Monitoring.vue'), meta: { title: '监控中心' } },
       { path: 'servers', name: 'Servers', component: () => import('../views/Servers.vue'), meta: { title: '服务器管理' } },
       { path: 'servers/:id', name: 'ServerDetail', component: () => import('../views/ServerDetail.vue'), meta: { title: '服务器详情' } },
       { path: 'services', name: 'Services', component: () => import('../views/Services.vue'), meta: { title: '服务管理' } },

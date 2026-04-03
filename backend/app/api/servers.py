@@ -274,19 +274,33 @@ def create_server():
                 'message': 'Docker密码长度不能超过255个字符'
             }), 400
         
+        # 验证证书路径
+        cert_path = data.get('cert_path')
+        if cert_path:
+            if not validate_string_length(cert_path, max_len=255):
+                return jsonify({
+                    'code': 400,
+                    'message': '证书路径长度不能超过255个字符'
+                }), 400
+            if not cert_path.startswith('/'):
+                return jsonify({
+                    'code': 400,
+                    'message': '证书路径必须以/开头'
+                }), 400
+        
         # 加密敏感信息（密码）
         os_password_encrypted = encrypt_data(data.get('os_password')) if data.get('os_password') else None
         docker_password_encrypted = encrypt_data(data.get('docker_password')) if data.get('docker_password') else None
         
         cursor.execute(
             "INSERT INTO servers (env_type, platform, hostname, inner_ip, mapped_ip, public_ip, "
-            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, docker_user, docker_password, remark) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, docker_user, docker_password, remark, cert_path) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('env_type'), data.get('platform'), hostname,
              inner_ip, mapped_ip, public_ip,
              data.get('cpu'), data.get('memory'), data.get('sys_disk'),
              data.get('data_disk'), data.get('purpose'), data.get('os_user'),
-             os_password_encrypted, data.get('docker_user', 'docker'), docker_password_encrypted, data.get('remark'))
+             os_password_encrypted, data.get('docker_user', 'docker'), docker_password_encrypted, data.get('remark'), cert_path)
         )
         db.commit()
         server_id = cursor.lastrowid
@@ -326,7 +340,7 @@ def update_server(server_id):
         # 允许的字段白名单，防止SQL注入
         allowed_fields = ['env_type', 'platform', 'hostname', 'inner_ip', 'mapped_ip', 'public_ip',
                          'cpu', 'memory', 'sys_disk', 'data_disk', 'purpose', 'os_user',
-                         'os_password', 'docker_user', 'docker_password', 'remark']
+                         'os_password', 'docker_user', 'docker_password', 'remark', 'cert_path']
         
         # 输入验证
         if 'hostname' in data:
@@ -426,6 +440,19 @@ def update_server(server_id):
                 'code': 400,
                 'message': 'Docker密码长度不能超过255个字符'
             }), 400
+        
+        # 验证证书路径
+        if 'cert_path' in data and data['cert_path']:
+            if not validate_string_length(data['cert_path'], max_len=255):
+                return jsonify({
+                    'code': 400,
+                    'message': '证书路径长度不能超过255个字符'
+                }), 400
+            if not data['cert_path'].startswith('/'):
+                return jsonify({
+                    'code': 400,
+                    'message': '证书路径必须以/开头'
+                }), 400
         
         # 处理密码字段加密
         if 'os_password' in data and data['os_password']:

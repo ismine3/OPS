@@ -128,7 +128,8 @@ def register_blueprints(app):
     from .api.aliyun_accounts import aliyun_accounts_bp
     from .api.domains import domains_bp
     from .api.operation_logs import logs_bp
-    
+    from .api.monitoring import monitoring_bp
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(export_bp)
@@ -142,3 +143,4 @@ def register_blueprints(app):
     app.register_blueprint(aliyun_accounts_bp)
     app.register_blueprint(domains_bp)
     app.register_blueprint(logs_bp)
+    app.register_blueprint(monitoring_bp)

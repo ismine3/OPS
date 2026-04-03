@@ -162,6 +162,9 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="证书路径" prop="cert_path">
+          <el-input v-model="form.cert_path" placeholder="/etc/nginx/ssl/" />
+        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
         </el-form-item>
@@ -228,6 +231,7 @@ const form = reactive({
   os_password: '',
   docker_user: '',
   docker_password: '',
+  cert_path: '',
   remark: ''
 })
 
@@ -281,6 +285,10 @@ const rules = {
   ],
   docker_password: [
     { validator: maxLength(200), trigger: 'blur' }
+  ],
+  cert_path: [
+    { validator: safeText, trigger: 'blur' },
+    { validator: maxLength(500), trigger: 'blur' }
   ],
   remark: [
     { validator: safeText, trigger: 'blur' },
@@ -350,6 +358,7 @@ function resetForm() {
   form.os_password = ''
   form.docker_user = ''
   form.docker_password = ''
+  form.cert_path = ''
   form.remark = ''
 }
 

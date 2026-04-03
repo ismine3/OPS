@@ -817,6 +817,12 @@ function handleServerChange(serverId: number) {
   if (selectedServer.value && !selectedServer.value.docker_user) {
     deployForm.ssh_user = 'root'
   }
+  // 自动填充远程目录：使用服务器的 cert_path 字段，若为空则设为空字符串
+  if (selectedServer.value && selectedServer.value.cert_path) {
+    deployForm.remote_path = selectedServer.value.cert_path
+  } else {
+    deployForm.remote_path = ''
+  }
 }
 
 async function handleDeploy() {

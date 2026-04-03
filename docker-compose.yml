@@ -55,6 +55,8 @@ services:
       DOMAIN_WARNING_DAYS: "30"
       CERT_AUTO_CHECK_CRON: "0 8 * * *"
       DOMAIN_AUTO_NOTIFY_CRON: "0 8 * * *"
+      GRAFANA_URL: "https://grafana.huazsz.com"
+      GRAFANA_DASHBOARDS: '[{"name":"主机监控","uid":"StarsL-JOB-node"},{"name":"容器监控","uid":"pMEd7m0Mz"}]'
     volumes:
       - ./backend/app/uploads:/app/app/uploads
     ports:

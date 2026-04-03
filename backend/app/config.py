@@ -49,6 +49,9 @@ class Config:
 
     CERT_FILES_DIR = os.path.join(UPLOAD_FOLDER, "certs")
 
+    GRAFANA_URL = os.environ.get("GRAFANA_URL", "")
+    GRAFANA_DASHBOARDS = os.environ.get("GRAFANA_DASHBOARDS", '[{"name":"主机监控","uid":"node-exporter"},{"name":"容器监控","uid":"cadvisor"}]')
+
     @staticmethod
     def get_cors_origins_list():
         return _split_origins(Config.CORS_ORIGINS)

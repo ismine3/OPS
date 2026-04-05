@@ -31,9 +31,9 @@
           <el-icon><SetUp /></el-icon>
           <template #title>服务管理</template>
         </el-menu-item>
-        <el-menu-item index="/apps">
+        <el-menu-item index="/accounts">
           <el-icon><Grid /></el-icon>
-          <template #title>应用系统</template>
+          <template #title>账号管理</template>
         </el-menu-item>
         <el-menu-item index="/domains">
           <el-icon><Link /></el-icon>
@@ -47,9 +47,9 @@
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
         </el-menu-item>
-        <el-menu-item v-if="userStore.isAdmin" index="/aliyun-accounts">
+        <el-menu-item v-if="userStore.isAdmin" index="/credentials">
           <el-icon><Key /></el-icon>
-          <template #title>阿里云账户</template>
+          <template #title>凭证管理</template>
         </el-menu-item>
         <el-menu-item v-if="userStore.isAdmin" index="/users">
           <el-icon><UserFilled /></el-icon>

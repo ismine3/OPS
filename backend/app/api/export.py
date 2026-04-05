@@ -192,7 +192,7 @@ def export_excel():
         headers3 = ["序号", "编号", "应用名称", "所属单位", "访问地址", "用户名", "密码", "备注"]
 
         with db.cursor() as cursor:
-            cursor.execute("SELECT * FROM app_systems ORDER BY id")
+            cursor.execute("SELECT * FROM accounts ORDER BY id")
             apps = cursor.fetchall()
 
         for col_idx, header in enumerate(headers3, 1):

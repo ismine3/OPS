@@ -11,7 +11,7 @@ class Config:
     # 生产环境必须通过环境变量设置，勿使用代码中的默认值
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "")
-    JWT_EXPIRATION_HOURS = int(os.environ.get("JWT_EXPIRATION_HOURS", "24"))
+    JWT_EXPIRATION_HOURS = int(os.environ.get("JWT_EXPIRATION_HOURS", "2"))
 
     DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
     DB_PORT = int(os.environ.get("DB_PORT", "3306"))

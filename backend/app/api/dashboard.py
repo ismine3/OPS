@@ -35,7 +35,7 @@ def get_stats():
         cursor.execute("SELECT COUNT(*) as cnt FROM services")
         service_count = cursor.fetchone()['cnt']
 
-        cursor.execute("SELECT COUNT(*) as cnt FROM app_systems")
+        cursor.execute("SELECT COUNT(*) as cnt FROM accounts")
         app_count = cursor.fetchone()['cnt']
 
         cursor.execute("SELECT COUNT(*) as cnt FROM domains")

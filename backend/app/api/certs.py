@@ -811,7 +811,7 @@ def sync_aliyun_certs():
         
         # 获取阿里云账号信息（需要解密 access_key_secret）
         cursor.execute(
-            "SELECT account_name, access_key_id, access_key_secret FROM aliyun_accounts WHERE id = %s AND is_active = 1",
+            "SELECT credential_name, access_key_id, access_key_secret FROM credentials WHERE id = %s AND is_active = 1",
             (account_id,)
         )
         account = cursor.fetchone()
@@ -834,7 +834,7 @@ def sync_aliyun_certs():
             aliyun_certs = scan_aliyun_certs(
                 account['access_key_id'],
                 access_key_secret,
-                account['account_name']
+                account['credential_name']
             )
         except Exception as e:
             logger.error(f'同步阿里云证书异常: {str(e)}')
@@ -1007,7 +1007,7 @@ def sync_aliyun_certs():
         db.commit()
         
         # 记录操作日志
-        log_operation(module='证书管理', action='sync', target_id=account_id, target_name=account['account_name'],
+        log_operation(module='证书管理', action='sync', target_id=account_id, target_name=account['credential_name'],
                      detail={'synced': synced_count, 'updated': updated_count, 'skipped': skipped_count,
                             'downloaded': downloaded_count, 'download_failed': download_failed_count})
         

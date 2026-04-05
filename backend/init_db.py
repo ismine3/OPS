@@ -127,9 +127,9 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务分类字典表';
     """)
 
-    # 4. 应用系统台账表
+    # 4. 账号台账表
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS `app_systems` (
+    CREATE TABLE IF NOT EXISTS `accounts` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `seq_no` VARCHAR(50) COMMENT '编号',
         `name` VARCHAR(200) NOT NULL COMMENT '应用名称',
@@ -141,7 +141,7 @@ def init_database():
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX `idx_name` (`name`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用系统台账表';
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账号台账表';
     """)
 
 
@@ -156,10 +156,14 @@ def init_database():
         `cron_expression` VARCHAR(100) NOT NULL COMMENT 'Cron表达式',
         `script_content` TEXT COMMENT '脚本内容或SQL语句',
         `script_path` VARCHAR(500) COMMENT '脚本路径（如果是文件）',
+        `execute_command` VARCHAR(500) COMMENT '自定义执行命令',
+        `script_files` TEXT COMMENT 'JSON数组，存储多个脚本的相对路径',
         `target_servers` JSON COMMENT '目标服务器ID列表',
         `is_active` BOOLEAN DEFAULT TRUE COMMENT '是否启用',
         `last_run_at` DATETIME COMMENT '上次执行时间',
         `next_run_at` DATETIME COMMENT '下次执行时间',
+        `last_status` VARCHAR(50) COMMENT '上次执行状态',
+        `last_output` TEXT COMMENT '上次执行输出',
         `created_by` INT COMMENT '创建人ID',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -235,19 +239,19 @@ def init_database():
     ('中间件', 1), ('数据库', 2), ('缓存', 3), ('消息队列', 4), ('应用服务', 5), ('数据服务', 6)
     """)
 
-    # 12. 阿里云账户配置表
+    # 12. 云凭证配置表
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS `aliyun_accounts` (
+    CREATE TABLE IF NOT EXISTS `credentials` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `account_name` VARCHAR(100) NOT NULL UNIQUE COMMENT '账户名称',
+        `credential_name` VARCHAR(100) NOT NULL UNIQUE COMMENT '凭证名称',
         `access_key_id` VARCHAR(100) NOT NULL COMMENT 'AccessKey ID',
         `access_key_secret` VARCHAR(255) NOT NULL COMMENT 'AccessKey Secret',
         `is_active` TINYINT DEFAULT 1 COMMENT '是否启用 0:禁用 1:启用',
-        `description` VARCHAR(255) COMMENT '账户描述',
+        `description` VARCHAR(255) COMMENT '凭证描述',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX `idx_account_name` (`account_name`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='阿里云账户配置表';
+        INDEX `idx_credential_name` (`credential_name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='云凭证配置表';
     """)
 
     # 13. 域名管理表

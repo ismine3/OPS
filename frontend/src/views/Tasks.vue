@@ -32,6 +32,29 @@
             <el-tag type="info" size="small">{{ row.cron_expression }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="script_files" label="脚本文件" min-width="120">
+          <template #default="{ row }">
+            <template v-if="row.script_files && row.script_files.length > 0">
+              <el-tooltip placement="top">
+                <template #content>
+                  <div v-for="fileName in row.script_files" :key="fileName">{{ fileName }}</div>
+                </template>
+                <el-tag type="info" size="small" style="cursor: pointer;">
+                  {{ row.script_files.length }} 个文件
+                </el-tag>
+              </el-tooltip>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="execute_command" label="执行命令" min-width="150">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.execute_command" :content="row.execute_command" placement="top">
+              <span class="command-text">{{ row.execute_command }}</span>
+            </el-tooltip>
+            <el-tag v-else type="warning" size="small">自动</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="is_active" label="状态" min-width="80">
           <template #default="{ row }">
             <el-switch v-model="row.is_active" @change="handleToggle(row)" />
@@ -78,19 +101,44 @@
           </el-input>
           <el-text type="info" size="small">格式: 分 时 日 月 周，例如: 0 2 * * * 表示每天凌晨2点</el-text>
         </el-form-item>
-        <el-form-item label="脚本文件" prop="script_file">
+        <el-form-item label="执行命令" prop="execute_command">
+          <el-input
+            v-model="form.execute_command"
+            placeholder="如：python main.py --env prod"
+            clearable
+          />
+          <el-text type="info" size="small">
+            当设置执行命令时，系统会在脚本文件目录下执行该命令；未设置时按文件类型自动执行
+          </el-text>
+        </el-form-item>
+        <el-form-item label="脚本文件" prop="scriptFiles">
+          <!-- 编辑模式：展示已有文件 -->
+          <div v-if="editingId && form.existingFiles.length > 0" class="existing-files">
+            <div class="existing-files-label">已上传文件：</div>
+            <el-tag
+              v-for="fileName in form.existingFiles"
+              :key="fileName"
+              closable
+              type="info"
+              class="file-tag"
+              @close="handleRemoveExistingFile(fileName)"
+            >
+              {{ fileName }}
+            </el-tag>
+          </div>
           <el-upload
             ref="uploadRef"
             action="#"
             :auto-upload="false"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
-            :limit="1"
-            accept=".py"
+            :file-list="fileList"
+            accept=".py,.sh"
+            multiple
           >
             <el-button type="primary">选择文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">仅支持 .py 文件{{ editingId ? '，不选择则保留原文件' : '' }}</div>
+              <div class="el-upload__tip">支持 .py 和 .sh 文件，可选择多个文件{{ editingId ? '，不选择则保留原文件' : '' }}</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -134,7 +182,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled } from '@element-plus/icons-vue'
@@ -169,8 +217,13 @@ const form = reactive({
   name: '',
   description: '',
   cron_expression: '',
-  script_file: null
+  execute_command: '',
+  scriptFiles: [] as File[],
+  existingFiles: [] as string[],
+  removeFiles: [] as string[]
 })
+
+const fileList = ref<any[]>([])
 
 const rules = {
   name: [
@@ -219,7 +272,11 @@ function resetFormData() {
   form.name = ''
   form.description = ''
   form.cron_expression = ''
-  form.script_file = null
+  form.execute_command = ''
+  form.scriptFiles = []
+  form.existingFiles = []
+  form.removeFiles = []
+  fileList.value = []
 }
 
 function handleAdd() {
@@ -229,6 +286,7 @@ function handleAdd() {
   if (uploadRef.value) {
     uploadRef.value.clearFiles()
   }
+  fileList.value = []
   dialogVisible.value = true
 }
 
@@ -241,7 +299,11 @@ function handleEdit(row) {
   form.name = row.name
   form.description = row.description || ''
   form.cron_expression = row.cron_expression
-  form.script_file = null
+  form.execute_command = row.execute_command || ''
+  form.existingFiles = row.script_files ? [...row.script_files] : []
+  form.scriptFiles = []
+  form.removeFiles = []
+  fileList.value = []
   if (uploadRef.value) {
     uploadRef.value.clearFiles()
   }
@@ -250,21 +312,44 @@ function handleEdit(row) {
 
 /**
  * @param {any} file
+ * @param {any} fileListParam
  */
-function handleFileChange(file) {
-  form.script_file = file.raw
+function handleFileChange(file, fileListParam) {
+  form.scriptFiles = fileListParam.map((f: any) => f.raw).filter(Boolean)
 }
 
-function handleFileRemove() {
-  form.script_file = null
+/**
+ * @param {any} file
+ * @param {any} fileListParam
+ */
+function handleFileRemove(file, fileListParam) {
+  form.scriptFiles = fileListParam.map((f: any) => f.raw).filter(Boolean)
+}
+
+/**
+ * 删除已有文件
+ * @param {string} fileName
+ */
+function handleRemoveExistingFile(fileName) {
+  const index = form.existingFiles.indexOf(fileName)
+  if (index > -1) {
+    form.existingFiles.splice(index, 1)
+    form.removeFiles.push(fileName)
+  }
 }
 
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  if (!editingId.value && !form.script_file) {
-    ElMessage.warning('请选择脚本文件')
+  // 创建时至少需要一个文件，编辑时需要有文件（已有+新上传）
+  const totalFiles = form.existingFiles.length + form.scriptFiles.length
+  if (!editingId.value && form.scriptFiles.length === 0) {
+    ElMessage.warning('请选择至少一个脚本文件')
+    return
+  }
+  if (editingId.value && totalFiles === 0) {
+    ElMessage.warning('任务至少需要一个脚本文件')
     return
   }
 
@@ -274,8 +359,20 @@ async function handleSubmit() {
     formData.append('name', form.name)
     formData.append('description', form.description)
     formData.append('cron_expression', form.cron_expression)
-    if (form.script_file) {
-      formData.append('script', form.script_file)
+    
+    // 添加执行命令（如果有）
+    if (form.execute_command) {
+      formData.append('execute_command', form.execute_command)
+    }
+    
+    // 添加新上传的文件（多文件）
+    form.scriptFiles.forEach(file => {
+      formData.append('script_files', file)
+    })
+    
+    // 编辑模式：添加要删除的文件列表
+    if (editingId.value && form.removeFiles.length > 0) {
+      formData.append('remove_files', JSON.stringify(form.removeFiles))
     }
 
     if (editingId.value) {
@@ -413,5 +510,32 @@ function getStatusText(status) {
   font-family: monospace;
   font-size: 13px;
   margin: 0;
+}
+
+.existing-files {
+  margin-bottom: 12px;
+}
+
+.existing-files-label {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.file-tag {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.command-text {
+  font-family: monospace;
+  font-size: 12px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  max-width: 140px;
+  vertical-align: middle;
 }
 </style>

@@ -10,7 +10,7 @@ import math
 import logging
 import socket
 
-from .script_runner import run_script_file
+from .script_runner import run_script_file, run_custom_command
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +36,17 @@ def get_db_connection(db_config):
     return pymysql.connect(**db_config)
 
 
-def execute_script(task_id, script_path, db_config):
+def execute_script(task_id, script_path, db_config, execute_command=None, task_dir=None):
     """
     执行脚本并记录日志
     在子进程中执行 Python 脚本，捕获输出并记录到数据库
+    
+    Args:
+        task_id: 任务ID
+        script_path: 脚本路径（向后兼容）
+        db_config: 数据库配置
+        execute_command: 自定义执行命令（可选）
+        task_dir: 任务文件目录（可选）
     """
     def run():
         conn = None
@@ -68,7 +75,13 @@ def execute_script(task_id, script_path, db_config):
             conn.commit()
             
             try:
-                result = run_script_file(script_path, db_config=db_config, timeout=300)
+                # 优先使用自定义执行命令
+                if execute_command and task_dir:
+                    result = run_custom_command(execute_command, task_dir, timeout=300)
+                elif script_path:
+                    result = run_script_file(script_path, db_config=db_config, timeout=300)
+                else:
+                    raise ValueError("任务没有配置执行命令或脚本路径")
             except (FileNotFoundError, RuntimeError, ValueError) as e:
                 end_time = datetime.datetime.now()
                 err = str(e)
@@ -165,10 +178,18 @@ def execute_script(task_id, script_path, db_config):
     thread.start()
 
 
-def add_task_to_scheduler(task_id, script_path, cron_expression, db_config):
+def add_task_to_scheduler(task_id, script_path, cron_expression, db_config, execute_command=None, task_dir=None):
     """
     添加任务到调度器
     cron_expression 格式: "分 时 日 月 周"（5个字段）
+    
+    Args:
+        task_id: 任务ID
+        script_path: 脚本路径（向后兼容）
+        cron_expression: Cron表达式
+        db_config: 数据库配置
+        execute_command: 自定义执行命令（可选）
+        task_dir: 任务文件目录（可选）
     """
     try:
         # 解析 cron 表达式
@@ -197,7 +218,7 @@ def add_task_to_scheduler(task_id, script_path, cron_expression, db_config):
             func=execute_script,
             trigger=trigger,
             id=job_id,
-            args=[task_id, script_path, db_config],
+            args=[task_id, script_path, db_config, execute_command, task_dir],
             replace_existing=True
         )
         
@@ -228,27 +249,52 @@ def init_scheduler(app):
         conn = get_db_connection(db_config)
         cursor = conn.cursor()
         
-        # 查询所有活跃的任务
+        # 查询所有活跃的任务，包含新字段
         cursor.execute("""
-            SELECT id, script_path, cron_expression 
-            FROM scheduled_tasks 
-            WHERE is_active = TRUE AND script_path IS NOT NULL
+            SELECT id, script_path, cron_expression, execute_command, script_files
+            FROM scheduled_tasks
+            WHERE is_active = TRUE
         """)
         
         tasks = cursor.fetchall()
         
+        # 获取上传目录
+        upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads')
+        scripts_dir = os.path.join(upload_folder, 'scripts')
+        
         # 添加所有活跃任务到调度器
         for task in tasks:
-            if task['script_path'] and os.path.exists(task['script_path']):
+            task_id = task['id']
+            script_path = task['script_path']
+            execute_command = task['execute_command']
+            script_files = task['script_files']
+            
+            # 确定任务目录
+            task_dir = os.path.join(scripts_dir, str(task_id))
+            
+            # 判断是否可以使用新逻辑
+            if execute_command and task_dir and os.path.isdir(task_dir):
+                # 使用自定义命令
                 add_task_to_scheduler(
-                    task['id'],
-                    task['script_path'],
+                    task_id,
+                    script_path,
+                    task['cron_expression'],
+                    db_config,
+                    execute_command,
+                    task_dir
+                )
+                logger.info("已加载定时任务: %s (使用自定义命令: %s)", task_id, execute_command)
+            elif script_path and os.path.exists(script_path):
+                # 向后兼容：使用单文件模式
+                add_task_to_scheduler(
+                    task_id,
+                    script_path,
                     task['cron_expression'],
                     db_config
                 )
-                logger.info("已加载定时任务: %s", task["id"])
+                logger.info("已加载定时任务: %s", task_id)
             else:
-                logger.warning("任务 %s 的脚本文件不存在，跳过", task["id"])
+                logger.warning("任务 %s 的脚本文件不存在且没有自定义命令，跳过", task_id)
         
         cursor.close()
         conn.close()

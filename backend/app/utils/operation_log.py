@@ -146,11 +146,11 @@ def log_logout(user_id, username):
 MODULE_NAMES = {
     "servers": "服务器管理",
     "services": "服务管理",
-    "apps": "应用系统",
+    "apps": "账号管理",
     "domains": "域名管理",
     "certs": "证书管理",
     "users": "用户管理",
-    "aliyun_accounts": "阿里云账户",
+    "aliyun_accounts": "凭证管理",
     "tasks": "定时任务",
 }
 

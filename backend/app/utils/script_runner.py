@@ -16,6 +16,36 @@ def _ext(script_path: str) -> str:
     return script_path.rsplit(".", 1)[-1].lower()
 
 
+def run_custom_command(command, work_dir, timeout=300):
+    """
+    在指定工作目录下执行自定义命令
+    
+    Args:
+        command: 要执行的命令，如 "python main.py --env prod"
+        work_dir: 工作目录路径
+        timeout: 超时时间（秒），默认300秒
+    
+    Returns:
+        subprocess.CompletedProcess 对象
+    """
+    if not command:
+        raise ValueError("命令不能为空")
+    
+    if not work_dir or not os.path.isdir(work_dir):
+        raise FileNotFoundError(f"工作目录不存在: {work_dir}")
+    
+    logger.info(f"在目录 {work_dir} 执行命令: {command}")
+    
+    return subprocess.run(
+        command,
+        shell=True,
+        cwd=work_dir,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
 def run_script_file(script_path, db_config=None, timeout=300):
     """
     执行脚本文件，返回 subprocess.CompletedProcess。

@@ -6,7 +6,7 @@
         <el-form-item label="关键词">
           <el-input 
             v-model="searchParams.search" 
-            placeholder="应用名称/单位/用户名" 
+            placeholder="账号名称/单位/用户名" 
             clearable 
             style="width: 280px"
             @keyup.enter="handleSearch"
@@ -17,7 +17,7 @@
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
         <el-form-item style="float: right;">
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增应用</el-button>
+          <el-button type="primary" :icon="Plus" @click="handleAdd">新增账号</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -26,7 +26,7 @@
     <el-card class="table-card">
       <el-table :data="tableData" stripe v-loading="loading" style="width: 100%">
         <el-table-column prop="seq_no" label="编号" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="name" label="应用名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="name" label="账号名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="company" label="所属单位" min-width="150" show-overflow-tooltip />
         <el-table-column prop="access_url" label="访问地址" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
@@ -75,8 +75,8 @@
         <el-form-item label="编号" prop="seq_no">
           <el-input v-model="form.seq_no" placeholder="如：APP001" />
         </el-form-item>
-        <el-form-item label="应用名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入应用名称" />
+        <el-form-item label="账号名称" prop="name">
+          <el-input v-model="form.name" placeholder="请输入账号名称" />
         </el-form-item>
         <el-form-item label="所属单位" prop="company">
           <el-input v-model="form.company" placeholder="请输入所属单位" />
@@ -121,7 +121,7 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const tableData = ref([])
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增应用')
+const dialogTitle = ref('新增账号')
 const editingId = ref(null)
 /** @type {any} */
 const formRef = ref(null)
@@ -152,7 +152,7 @@ const rules = {
     { validator: maxLength(50), trigger: 'blur' }
   ],
   name: [
-    { required: true, message: '请输入应用名称', trigger: 'blur' },
+    { required: true, message: '请输入账号名称', trigger: 'blur' },
     { validator: safeText, trigger: 'blur' },
     { validator: maxLength(100), trigger: 'blur' }
   ],
@@ -217,7 +217,7 @@ function resetForm() {
 }
 
 function handleAdd() {
-  dialogTitle.value = '新增应用'
+  dialogTitle.value = '新增账号'
   editingId.value = null
   resetForm()
   dialogVisible.value = true
@@ -227,7 +227,7 @@ function handleAdd() {
  * @param {any} row
  */
 function handleEdit(row) {
-  dialogTitle.value = '编辑应用'
+  dialogTitle.value = '编辑账号'
   editingId.value = row.id
   Object.assign(form, row)
   dialogVisible.value = true
@@ -257,7 +257,7 @@ async function handleSubmit() {
  * @param {any} row
  */
 function handleDelete(row) {
-  ElMessageBox.confirm(`确定要删除应用 "${row.name}" 吗？`, '提示', { 
+  ElMessageBox.confirm(`确定要删除账号 "${row.name}" 吗？`, '提示', { 
     type: 'warning',
     confirmButtonText: '确定',
     cancelButtonText: '取消'

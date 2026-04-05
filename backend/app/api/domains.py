@@ -58,7 +58,7 @@ def get_domains():
         # 构建基础查询条件
         base_sql = """
             FROM domains d
-            LEFT JOIN aliyun_accounts a ON d.aliyun_account_id = a.id
+            LEFT JOIN credentials c ON d.aliyun_account_id = c.id
         """
         params = []
         
@@ -74,7 +74,7 @@ def get_domains():
         
         # 查询分页数据
         data_sql = f"""
-            SELECT d.*, a.account_name as aliyun_account_name
+            SELECT d.*, c.credential_name as aliyun_account_name
             {base_sql}
             ORDER BY d.id DESC
             LIMIT %s OFFSET %s
@@ -351,7 +351,7 @@ def sync_aliyun_domains():
     try:
         # 获取阿里云账户信息（需要解密 access_key_secret）
         cursor.execute(
-            "SELECT access_key_id, access_key_secret FROM aliyun_accounts WHERE id = %s AND is_active = 1",
+            "SELECT access_key_id, access_key_secret FROM credentials WHERE id = %s AND is_active = 1",
             (account_id,)
         )
         account = cursor.fetchone()

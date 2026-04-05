@@ -245,7 +245,7 @@ def import_water_env(ws, cursor):
 def import_app_systems(ws, cursor):
     """导入应用系统台账表"""
     print("导入应用系统台账表...")
-    cursor.execute("DELETE FROM app_systems")
+    cursor.execute("DELETE FROM accounts")
 
     # 表头在第2行，数据从第3行开始
     # 列顺序: 序号(0)|名称(1)|单位(2)|架构(3)|登录链接(4)|账号(5)|密码(6)|备注(7)|更新时间(8)
@@ -269,7 +269,7 @@ def import_app_systems(ws, cursor):
         # 跳过更新时间(vals[8])
 
         cursor.execute(
-            "INSERT INTO app_systems (seq_no, name, company, access_url, username, password, remark) "
+            "INSERT INTO accounts (seq_no, name, company, access_url, username, password, remark) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (seq_no, name, company, access_url, username, password, remark)
         )
@@ -278,11 +278,11 @@ def import_app_systems(ws, cursor):
 
 
 def import_web_accounts(ws, cursor):
-    """导入web账户Sheet到app_systems表（追加数据）"""
+    """导入web账户Sheet到accounts表（追加数据）"""
     print("导入web账户...")
 
     # 获取当前最大序号，用于自动生成seq_no
-    cursor.execute("SELECT MAX(CAST(seq_no AS UNSIGNED)) FROM app_systems WHERE seq_no IS NOT NULL")
+    cursor.execute("SELECT MAX(CAST(seq_no AS UNSIGNED)) FROM accounts WHERE seq_no IS NOT NULL")
     result = cursor.fetchone()
     max_seq = result[0] if result and result[0] else 0
     current_seq = max_seq
@@ -327,7 +327,7 @@ def import_web_accounts(ws, cursor):
         current_seq += 1
 
         cursor.execute(
-            "INSERT INTO app_systems (seq_no, name, company, access_url, username, password, remark) "
+            "INSERT INTO accounts (seq_no, name, company, access_url, username, password, remark) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (current_seq, name, current_company, access_url, username, password, None)
         )

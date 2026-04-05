@@ -4,7 +4,7 @@
     <el-card class="search-card">
       <el-form :model="searchParams" inline>
         <el-form-item style="float: right;">
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增账户</el-button>
+          <el-button type="primary" :icon="Plus" @click="handleAdd">新增凭证</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -12,7 +12,7 @@
     <!-- 数据表格 -->
     <el-card class="table-card">
       <el-table :data="tableData" stripe v-loading="loading" style="width: 100%">
-        <el-table-column prop="account_name" label="账户名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="credential_name" label="凭证名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="access_key_id" label="AccessKey ID" min-width="200" show-overflow-tooltip />
         <el-table-column prop="access_key_secret" label="AccessKey Secret" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
@@ -40,8 +40,8 @@
     <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="550px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
-        <el-form-item label="账户名称" prop="account_name">
-          <el-input v-model="form.account_name" placeholder="请输入账户名称" />
+        <el-form-item label="凭证名称" prop="credential_name">
+          <el-input v-model="form.credential_name" placeholder="请输入凭证名称" />
         </el-form-item>
         <el-form-item label="AccessKey ID" prop="access_key_id">
           <el-input v-model="form.access_key_id" placeholder="请输入AccessKey ID" />
@@ -82,14 +82,14 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const tableData = ref([])
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增账户')
+const dialogTitle = ref('新增凭证')
 const editingId = ref(null)
 const formRef = ref(/** @type {any} */(null))
 
 const searchParams = reactive({})
 
 const form = reactive({
-  account_name: '',
+  credential_name: '',
   access_key_id: '',
   access_key_secret: '',
   is_active: true,
@@ -97,8 +97,8 @@ const form = reactive({
 })
 
 const rules = {
-  account_name: [
-    { required: true, message: '请输入账户名称', trigger: 'blur' },
+  credential_name: [
+    { required: true, message: '请输入凭证名称', trigger: 'blur' },
     { validator: safeText, trigger: 'blur' },
     { validator: maxLength(100), trigger: 'blur' }
   ],
@@ -131,7 +131,7 @@ async function fetchData() {
 }
 
 function resetForm() {
-  form.account_name = ''
+  form.credential_name = ''
   form.access_key_id = ''
   form.access_key_secret = ''
   form.is_active = true
@@ -139,7 +139,7 @@ function resetForm() {
 }
 
 function handleAdd() {
-  dialogTitle.value = '新增账户'
+  dialogTitle.value = '新增凭证'
   editingId.value = null
   resetForm()
   dialogVisible.value = true
@@ -147,7 +147,7 @@ function handleAdd() {
 
 /** @param {any} row */
 function handleEdit(row) {
-  dialogTitle.value = '编辑账户'
+  dialogTitle.value = '编辑凭证'
   editingId.value = row.id
   Object.assign(form, row)
   dialogVisible.value = true
@@ -190,7 +190,7 @@ async function handleSubmit() {
 
 /** @param {any} row */
 function handleDelete(row) {
-  ElMessageBox.confirm(`确定要删除账户 "${row.account_name}" 吗？`, '提示', {
+  ElMessageBox.confirm(`确定要删除凭证 "${row.credential_name}" 吗？`, '提示', {
     type: 'warning',
     confirmButtonText: '确定',
     cancelButtonText: '取消'

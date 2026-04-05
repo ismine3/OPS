@@ -1,17 +1,17 @@
 import request from './request'
 
 export function getApps(params: Record<string, any>) {
-  return request.get('/apps', { params })
+  return request.get('/accounts', { params })
 }
 
 export function createApp(data: Record<string, any>) {
-  return request.post('/apps', data)
+  return request.post('/accounts', data)
 }
 
 export function updateApp(id: number | string, data: Record<string, any>) {
-  return request.put(`/apps/${id}`, data)
+  return request.put(`/accounts/${id}`, data)
 }
 
 export function deleteApp(id: number | string) {
-  return request.delete(`/apps/${id}`)
+  return request.delete(`/accounts/${id}`)
 }

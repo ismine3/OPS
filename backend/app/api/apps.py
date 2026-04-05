@@ -8,7 +8,7 @@ from ..utils.operation_log import log_operation
 from ..utils.validators import validate_url, validate_string_length
 from ..utils.password_utils import encrypt_data, decrypt_data
 
-apps_bp = Blueprint('apps', __name__, url_prefix='/api/apps')
+apps_bp = Blueprint('apps', __name__, url_prefix='/api/accounts')
 
 
 @apps_bp.route('/<int:app_id>', methods=['GET'])
@@ -21,7 +21,7 @@ def get_app_detail(app_id):
     db = get_db()
     cursor = db.cursor()
     try:
-        cursor.execute("SELECT * FROM app_systems WHERE id = %s", (app_id,))
+        cursor.execute("SELECT * FROM accounts WHERE id = %s", (app_id,))
         app = cursor.fetchone()
         
         if not app:
@@ -80,12 +80,12 @@ def get_apps():
             params.extend([f'%{search}%'] * 3)
 
         # 查询总数
-        count_sql = f"SELECT COUNT(*) as total FROM app_systems {where_clause}"
+        count_sql = f"SELECT COUNT(*) as total FROM accounts {where_clause}"
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
 
         # 查询数据
-        sql = f"SELECT * FROM app_systems {where_clause} ORDER BY id LIMIT %s OFFSET %s"
+        sql = f"SELECT * FROM accounts {where_clause} ORDER BY id LIMIT %s OFFSET %s"
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         apps = cursor.fetchall()
@@ -180,7 +180,7 @@ def create_app():
         password_encrypted = encrypt_data(password) if password else None
         
         cursor.execute(
-            "INSERT INTO app_systems (seq_no, name, company, access_url, username, password, remark) "
+            "INSERT INTO accounts (seq_no, name, company, access_url, username, password, remark) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (data.get('seq_no'), name, company,
              access_url, username, password_encrypted,
@@ -190,7 +190,7 @@ def create_app():
         app_id = cursor.lastrowid
         
         # 记录操作日志
-        log_operation('应用系统', 'create', app_id, data.get('name'),
+        log_operation('账号', 'create', app_id, data.get('name'),
                      {'company': data.get('company'), 'access_url': data.get('access_url')})
         
         return jsonify({
@@ -218,7 +218,7 @@ def update_app(app_id):
     cursor = db.cursor()
     try:
         # 获取更新前的应用名
-        cursor.execute("SELECT name FROM app_systems WHERE id = %s", (app_id,))
+        cursor.execute("SELECT name FROM accounts WHERE id = %s", (app_id,))
         old_app = cursor.fetchone()
         app_name = old_app['name'] if old_app else None
         
@@ -282,11 +282,11 @@ def update_app(app_id):
                 values.append(data[key])
         if fields:
             values.append(app_id)
-            cursor.execute(f"UPDATE app_systems SET {', '.join(fields)} WHERE id = %s", values)
+            cursor.execute(f"UPDATE accounts SET {', '.join(fields)} WHERE id = %s", values)
             db.commit()
             
             # 记录操作日志
-            log_operation('应用系统', 'update', app_id, data.get('name') or app_name)
+            log_operation('账号', 'update', app_id, data.get('name') or app_name)
             
         return jsonify({
             'code': 200,
@@ -312,15 +312,15 @@ def delete_app(app_id):
     cursor = db.cursor()
     try:
         # 获取应用名
-        cursor.execute("SELECT name FROM app_systems WHERE id = %s", (app_id,))
+        cursor.execute("SELECT name FROM accounts WHERE id = %s", (app_id,))
         old_app = cursor.fetchone()
         app_name = old_app['name'] if old_app else None
         
-        cursor.execute("DELETE FROM app_systems WHERE id = %s", (app_id,))
+        cursor.execute("DELETE FROM accounts WHERE id = %s", (app_id,))
         db.commit()
         
         # 记录操作日志
-        log_operation('应用系统', 'delete', app_id, app_name)
+        log_operation('账号', 'delete', app_id, app_name)
         
         return jsonify({
             'code': 200,

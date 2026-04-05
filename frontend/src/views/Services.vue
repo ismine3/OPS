@@ -51,8 +51,20 @@
         <el-table-column prop="category" label="分类" min-width="100" />
         <el-table-column prop="service_name" label="服务名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" min-width="100" />
-        <el-table-column prop="inner_port" label="内部端口" min-width="100" align="center" />
-        <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
+        <el-table-column label="端口配置" min-width="200">
+          <template #default="{ row }">
+            <div class="port-list">
+              <el-tag 
+                v-for="(inner, index) in parsePorts(row.inner_port)" 
+                :key="index"
+                size="small"
+                style="margin-right: 4px; margin-bottom: 4px;"
+              >
+                {{ inner }} <span v-if="parsePorts(row.mapped_port)[index]">→ {{ parsePorts(row.mapped_port)[index] }}</span>
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="project_name" label="所属项目" min-width="120">
           <template #default="{ row }">
             <el-link v-if="row.project_id" type="primary" @click="$router.push(`/projects/${row.project_id}`)">
@@ -97,12 +109,12 @@
         </el-form-item>
         <el-form-item label="分类" prop="category">
           <el-select v-model="form.category" placeholder="请选择分类" style="width: 100%">
-            <el-option label="数据库" value="数据库" />
-            <el-option label="中间件" value="中间件" />
-            <el-option label="Web服务" value="Web服务" />
-            <el-option label="缓存" value="缓存" />
-            <el-option label="消息队列" value="消息队列" />
-            <el-option label="其他" value="其他" />
+            <el-option 
+              v-for="item in serviceCategories" 
+              :key="item.id" 
+              :label="item.name" 
+              :value="item.name" 
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="服务名称" prop="service_name">
@@ -349,6 +361,14 @@ function getEnvTagType(env: any) {
   }
   return map[env] || 'info'
 }
+
+/**
+ * @param {string} ports
+ */
+function parsePorts(ports: string) {
+  return ports.split(',').map(port => port.trim()).filter(port => port)
+}
+
 </script>
 
 <style scoped>
@@ -363,4 +383,10 @@ function getEnvTagType(env: any) {
 .table-card {
   margin-bottom: 0;
 }
+
+.port-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+
 </style>

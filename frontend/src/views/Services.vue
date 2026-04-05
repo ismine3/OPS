@@ -51,20 +51,8 @@
         <el-table-column prop="category" label="分类" min-width="100" />
         <el-table-column prop="service_name" label="服务名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" min-width="100" />
-        <el-table-column label="端口配置" min-width="200">
-          <template #default="{ row }">
-            <div class="port-list">
-              <el-tag 
-                v-for="(inner, index) in parsePorts(row.inner_port)" 
-                :key="index"
-                size="small"
-                style="margin-right: 4px; margin-bottom: 4px;"
-              >
-                {{ inner }} <span v-if="parsePorts(row.mapped_port)[index]">→ {{ parsePorts(row.mapped_port)[index] }}</span>
-              </el-tag>
-            </div>
-          </template>
-        </el-table-column>
+        <el-table-column prop="inner_port" label="内部端口" min-width="100" align="center" />
+        <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
         <el-table-column prop="project_name" label="所属项目" min-width="120">
           <template #default="{ row }">
             <el-link v-if="row.project_id" type="primary" @click="$router.push(`/projects/${row.project_id}`)">
@@ -349,11 +337,11 @@ function handleDelete(row: any) {
 }
 
 /**
- * @param {any} env
+ * @param {string} env
  */
-function getEnvTagType(env: any) {
+function getEnvTagType(env: string) {
   /** @type {Record<string, string>} */
-  const map = {
+  const map: Record<string, string> = {
     '生产': 'danger',
     '测试': 'warning',
     '智慧环保': 'success',

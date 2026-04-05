@@ -75,7 +75,38 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务器台账表';
     """)
 
-    # 3. 服务清单表
+    # 3. 项目管理表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `projects` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_name` VARCHAR(200) NOT NULL UNIQUE COMMENT '项目名称',
+        `description` TEXT COMMENT '项目描述',
+        `owner` VARCHAR(100) COMMENT '项目负责人',
+        `status` VARCHAR(50) DEFAULT '运行中' COMMENT '项目状态',
+        `remark` TEXT COMMENT '备注',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_project_name` (`project_name`),
+        INDEX `idx_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目管理表';
+    """)
+
+    # 4. 项目-服务器关联表（多对多）
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `project_servers` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL COMMENT '项目ID',
+        `server_id` INT NOT NULL COMMENT '服务器ID',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_project_id` (`project_id`),
+        INDEX `idx_server_id` (`server_id`),
+        UNIQUE KEY `uk_project_server` (`project_id`, `server_id`),
+        FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE,
+        FOREIGN KEY (`server_id`) REFERENCES `servers`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目-服务器关联表';
+    """)
+
+    # 5. 服务清单表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `services` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -127,7 +158,18 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务分类字典表';
     """)
 
-    # 4. 账号台账表
+    # 13. 项目状态字典表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `dict_project_statuses` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(50) NOT NULL UNIQUE COMMENT '项目状态名称',
+        `sort_order` INT DEFAULT 0 COMMENT '排序号',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_sort_order` (`sort_order`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目状态字典表';
+    """)
+
+    # 6. 账号台账表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `accounts` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -239,7 +281,13 @@ def init_database():
     ('中间件', 1), ('数据库', 2), ('缓存', 3), ('消息队列', 4), ('应用服务', 5), ('数据服务', 6)
     """)
 
-    # 12. 云凭证配置表
+    # 插入默认项目状态
+    cursor.execute("""
+    INSERT IGNORE INTO `dict_project_statuses` (`name`, `sort_order`) VALUES
+    ('运行中', 1), ('已下线', 2), ('规划中', 3)
+    """)
+
+    # 14. 云凭证配置表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `credentials` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -281,7 +329,6 @@ def init_database():
     CREATE TABLE IF NOT EXISTS `ssl_certificates` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `domain` VARCHAR(255) NOT NULL COMMENT '域名',
-        `project_name` VARCHAR(200) COMMENT '所属项目',
         `cert_type` TINYINT DEFAULT 0 COMMENT '证书类型 0:自动检测 1:手动录入 2:阿里云证书',
         `issuer` VARCHAR(200) COMMENT '颁发机构',
         `cert_generate_time` DATETIME COMMENT '证书生成时间',
@@ -308,6 +355,32 @@ def init_database():
         INDEX `idx_status` (`status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSL证书管理表';
     """)
+
+    # 为现有表添加 project_id 字段（如果不存在）
+    def add_column_if_not_exists(table_name, column_name, column_def):
+        """检查列是否存在，不存在则添加"""
+        try:
+            cursor.execute(f"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s
+            """, (Config.DB_NAME, table_name, column_name))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute(f"ALTER TABLE `{table_name}` ADD COLUMN {column_def}")
+                print(f"已为 {table_name} 表添加 {column_name} 字段")
+        except Exception as e:
+            print(f"为 {table_name} 表添加 {column_name} 字段时出错: {e}")
+
+    # 为 services 表添加 project_id 字段
+    add_column_if_not_exists('services', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
+
+    # 为 domains 表添加 project_id 字段
+    add_column_if_not_exists('domains', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
+
+    # 为 ssl_certificates 表添加 project_id 字段
+    add_column_if_not_exists('ssl_certificates', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
+
+    # 为 accounts 表添加 project_id 字段
+    add_column_if_not_exists('accounts', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
 
     conn.commit()
     cursor.close()

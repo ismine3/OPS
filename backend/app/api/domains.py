@@ -37,17 +37,20 @@ def get_domains():
     """
     获取域名列表（分页）
     支持 search 参数搜索 domain_name/owner/registrar
+    支持 project_id 参数筛选项目
     
     参数:
         page: 页码，默认1
         page_size: 每页数量，默认20
         search: 搜索关键词
+        project_id: 项目ID筛选
     
     返回: {"code": 200, "data": {"items": [...], "total": N}}
     """
     import datetime
     
     search = request.args.get('search', '').strip()
+    project_id = request.args.get('project_id', '').strip()
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', 20))
     offset = (page - 1) * page_size
@@ -59,13 +62,21 @@ def get_domains():
         base_sql = """
             FROM domains d
             LEFT JOIN credentials c ON d.aliyun_account_id = c.id
+            LEFT JOIN projects p ON d.project_id = p.id
         """
         params = []
-        
+                
         if search:
             base_sql += " WHERE d.domain_name LIKE %s OR d.owner LIKE %s OR d.registrar LIKE %s"
             like_pattern = f'%{search}%'
             params = [like_pattern, like_pattern, like_pattern]
+                
+        if project_id:
+            if search:
+                base_sql += " AND d.project_id = %s"
+            else:
+                base_sql += " WHERE d.project_id = %s"
+            params.append(project_id)
         
         # 查询总数
         count_sql = f"SELECT COUNT(*) as total {base_sql}"
@@ -74,7 +85,7 @@ def get_domains():
         
         # 查询分页数据
         data_sql = f"""
-            SELECT d.*, c.credential_name as aliyun_account_name
+            SELECT d.*, c.credential_name as aliyun_account_name, p.project_name
             {base_sql}
             ORDER BY d.id DESC
             LIMIT %s OFFSET %s
@@ -150,8 +161,8 @@ def create_domain():
         cursor.execute("""
             INSERT INTO domains (
                 domain_name, registrar, registration_date, expire_date, owner,
-                dns_servers, status, source, cost, remark
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                dns_servers, status, source, cost, remark, project_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             domain_name,
             data.get('registrar', ''),
@@ -162,7 +173,8 @@ def create_domain():
             data.get('status', '正常'),
             'manual',
             data.get('cost'),
-            data.get('remark', '')
+            data.get('remark', ''),
+            data.get('project_id')
         ))
         
         db.commit()
@@ -238,7 +250,7 @@ def update_domain(domain_id):
         # 构建更新数据
         allowed_fields = [
             'domain_name', 'registrar', 'registration_date', 'expire_date',
-            'owner', 'dns_servers', 'status', 'cost', 'remark'
+            'owner', 'dns_servers', 'status', 'cost', 'remark', 'project_id'
         ]
         
         update_fields = []

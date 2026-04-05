@@ -23,6 +23,7 @@ def get_servers():
     try:
         env_filter = request.args.get('env_type', '')
         platform_filter = request.args.get('platform', '')
+        project_filter = request.args.get('project_id', '')
         search = request.args.get('search', '')
         page = request.args.get('page', '1')
         page_size = request.args.get('page_size', '10')
@@ -45,22 +46,44 @@ def get_servers():
         where_clause = "WHERE 1=1"
         params = []
         if env_filter:
-            where_clause += " AND env_type = %s"
+            where_clause += " AND s.env_type = %s"
             params.append(env_filter)
         if platform_filter:
-            where_clause += " AND platform = %s"
+            where_clause += " AND s.platform = %s"
             params.append(platform_filter)
+        if project_filter:
+            where_clause += " AND ps.project_id = %s"
+            params.append(project_filter)
         if search:
-            where_clause += " AND (hostname LIKE %s OR inner_ip LIKE %s OR platform LIKE %s)"
+            where_clause += " AND (s.hostname LIKE %s OR s.inner_ip LIKE %s OR s.platform LIKE %s)"
             params.extend([f'%{search}%'] * 3)
 
-        # 查询总数
-        count_sql = f"SELECT COUNT(*) as total FROM servers {where_clause}"
+        # 查询总数（如果有项目筛选需要用子查询去重）
+        if project_filter:
+            count_sql = f"""
+                SELECT COUNT(DISTINCT s.id) as total 
+                FROM servers s 
+                LEFT JOIN project_servers ps ON s.id = ps.server_id 
+                {where_clause}
+            """
+        else:
+            count_sql = f"SELECT COUNT(*) as total FROM servers s {where_clause}"
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
 
-        # 查询数据
-        sql = f"SELECT * FROM servers {where_clause} ORDER BY env_type, id LIMIT %s OFFSET %s"
+        # 查询数据（LEFT JOIN 获取所属项目）
+        sql = f"""
+            SELECT s.*, 
+                   GROUP_CONCAT(DISTINCT p.project_name) as project_names,
+                   GROUP_CONCAT(DISTINCT p.id) as project_ids
+            FROM servers s
+            LEFT JOIN project_servers ps ON s.id = ps.server_id
+            LEFT JOIN projects p ON ps.project_id = p.id
+            {where_clause}
+            GROUP BY s.id
+            ORDER BY s.env_type, s.id
+            LIMIT %s OFFSET %s
+        """
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         servers = cursor.fetchall()
@@ -125,12 +148,21 @@ def get_server_detail(server_id):
             (server_id,)
         )
         services = cursor.fetchall()
-
+        
+        # 查询关联的项目列表
+        cursor.execute(
+            "SELECT p.id, p.project_name, p.status FROM projects p "
+            "JOIN project_servers ps ON p.id = ps.project_id WHERE ps.server_id = %s",
+            (server_id,)
+        )
+        projects = cursor.fetchall()
+        
         return jsonify({
             'code': 200,
             'data': {
                 'server': server,
-                'services': services
+                'services': services,
+                'projects': projects
             }
         })
     finally:
@@ -468,12 +500,26 @@ def update_server(server_id):
         if fields:
             values.append(server_id)
             cursor.execute(f"UPDATE servers SET {', '.join(fields)} WHERE id = %s", values)
-            db.commit()
-            # 记录操作日志
-            cursor.execute("SELECT hostname FROM servers WHERE id = %s", (server_id,))
-            server = cursor.fetchone()
-            log_operation(module='服务器管理', action='update', target_id=server_id, 
-                         target_name=server['hostname'] if server else str(server_id))
+        
+        # 处理项目关联更新
+        if 'project_ids' in data:
+            # 先删除旧的关联
+            cursor.execute("DELETE FROM project_servers WHERE server_id = %s", (server_id,))
+            # 添加新的关联
+            project_ids = data['project_ids']
+            if project_ids:
+                for pid in project_ids:
+                    cursor.execute(
+                        "INSERT INTO project_servers (project_id, server_id) VALUES (%s, %s)",
+                        (pid, server_id)
+                    )
+        
+        db.commit()
+        # 记录操作日志
+        cursor.execute("SELECT hostname FROM servers WHERE id = %s", (server_id,))
+        server = cursor.fetchone()
+        log_operation(module='服务器管理', action='update', target_id=server_id, 
+                     target_name=server['hostname'] if server else str(server_id))
         return jsonify({
             'code': 200,
             'message': '更新成功'

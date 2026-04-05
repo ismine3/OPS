@@ -49,12 +49,13 @@ def get_app_detail(app_id):
 def get_apps():
     """
     获取应用系统列表
-    支持查询参数: search（搜索 name、company、access_url）, page, page_size
+    支持查询参数: search（搜索 name、company、access_url）、project_id, page, page_size
     """
     db = get_db()
     cursor = db.cursor()
     try:
         search = request.args.get('search', '')
+        project_id = request.args.get('project_id', '')
         page = request.args.get('page', '1')
         page_size = request.args.get('page_size', '10')
 
@@ -76,16 +77,21 @@ def get_apps():
         where_clause = "WHERE 1=1"
         params = []
         if search:
-            where_clause += " AND (name LIKE %s OR company LIKE %s OR access_url LIKE %s)"
+            where_clause += " AND (a.name LIKE %s OR a.company LIKE %s OR a.access_url LIKE %s)"
             params.extend([f'%{search}%'] * 3)
-
+        if project_id:
+            where_clause += " AND a.project_id = %s"
+            params.append(project_id)
+        
         # 查询总数
-        count_sql = f"SELECT COUNT(*) as total FROM accounts {where_clause}"
+        count_sql = f"SELECT COUNT(*) as total FROM accounts a {where_clause}"
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
-
+        
         # 查询数据
-        sql = f"SELECT * FROM accounts {where_clause} ORDER BY id LIMIT %s OFFSET %s"
+        sql = f"""SELECT a.*, p.project_name FROM accounts a
+                  LEFT JOIN projects p ON a.project_id = p.id
+                  {where_clause} ORDER BY a.id LIMIT %s OFFSET %s"""
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         apps = cursor.fetchall()
@@ -180,11 +186,11 @@ def create_app():
         password_encrypted = encrypt_data(password) if password else None
         
         cursor.execute(
-            "INSERT INTO accounts (seq_no, name, company, access_url, username, password, remark) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO accounts (seq_no, name, company, access_url, username, password, remark, project_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (data.get('seq_no'), name, company,
              access_url, username, password_encrypted,
-             remark)
+             remark, data.get('project_id'))
         )
         db.commit()
         app_id = cursor.lastrowid
@@ -226,7 +232,7 @@ def update_app(app_id):
         fields = []
         values = []
         # 允许的字段白名单，防止SQL注入
-        allowed_fields = ['seq_no', 'name', 'company', 'access_url', 'username', 'password', 'remark']
+        allowed_fields = ['seq_no', 'name', 'company', 'access_url', 'username', 'password', 'remark', 'project_id']
         
         # 输入验证
         if 'name' in data:

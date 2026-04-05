@@ -14,7 +14,7 @@ services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 def get_services():
     """
     获取服务列表
-    支持查询参数: category, search, page, page_size
+    支持查询参数: category, search, env_type, project_id, page, page_size
     """
     db = get_db()
     cursor = db.cursor()
@@ -22,6 +22,7 @@ def get_services():
         search = request.args.get('search', '')
         category = request.args.get('category', '')
         env_type = request.args.get('env_type', '')
+        project_id = request.args.get('project_id', '')
         page = request.args.get('page', '1')
         page_size = request.args.get('page_size', '10')
 
@@ -51,7 +52,10 @@ def get_services():
         if env_type:
             where_clause += " AND sv.env_type = %s"
             params.append(env_type)
-
+        if project_id:
+            where_clause += " AND s.project_id = %s"
+            params.append(project_id)
+        
         # 查询总数
         count_sql = f"""SELECT COUNT(*) as total FROM services s
                         JOIN servers sv ON s.server_id = sv.id
@@ -60,9 +64,11 @@ def get_services():
         total = cursor.fetchone()['total']
 
         # 查询数据
-        sql = f"""SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.mapped_ip, sv.env_type
+        sql = f"""SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.mapped_ip, sv.env_type,
+                         p.project_name
                   FROM services s
                   JOIN servers sv ON s.server_id = sv.id
+                  LEFT JOIN projects p ON s.project_id = p.id
                   {where_clause}
                   ORDER BY sv.env_type, sv.inner_ip, s.category, s.service_name
                   LIMIT %s OFFSET %s"""
@@ -94,11 +100,11 @@ def create_service():
     try:
         data = request.json
         cursor.execute(
-            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, remark) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, remark, project_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('server_id'), data.get('category'), data.get('service_name'),
              data.get('version'), data.get('inner_port'), data.get('mapped_port'),
-             data.get('remark'))
+             data.get('remark'), data.get('project_id'))
         )
         db.commit()
         service_id = cursor.lastrowid
@@ -139,7 +145,7 @@ def update_service(service_id):
         data = request.json
         fields = []
         values = []
-        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'remark']:
+        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'remark', 'project_id']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])

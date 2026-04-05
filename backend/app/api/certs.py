@@ -156,13 +156,14 @@ def _get_safe_cert_dir(cert_id):
 def get_certs():
     """
     获取证书列表（分页）
-    支持查询参数: search（搜索domain/project_name）、cert_type（筛选证书类型）
+    支持查询参数: search（搜索domain/项目名）、cert_type（筛选证书类型）、project_id（筛选项目）
     
     参数:
         page: 页码，默认1
         page_size: 每页数量，默认20
-        search: 搜索关键词
+        search: 搜索关键词（搜索域名或关联的项目名）
         cert_type: 证书类型筛选
+        project_id: 项目ID筛选
     
     返回: {"code": 200, "data": {"items": [...], "total": N}}
     """
@@ -171,21 +172,27 @@ def get_certs():
     try:
         search = request.args.get('search', '').strip()
         cert_type = request.args.get('cert_type', '').strip()
+        project_id = request.args.get('project_id', '').strip()
         page = int(request.args.get('page', 1))
         page_size = int(request.args.get('page_size', 20))
         offset = (page - 1) * page_size
         
         # 构建基础查询条件
-        base_sql = "FROM ssl_certificates WHERE 1=1"
+        base_sql = "FROM ssl_certificates c LEFT JOIN projects p ON c.project_id = p.id WHERE 1=1"
         params = []
         
         if search:
-            base_sql += " AND (domain LIKE %s OR project_name LIKE %s)"
+            # 搜索域名或关联的项目名（通过 project_id JOIN projects 表获取）
+            base_sql += " AND (c.domain LIKE %s OR p.project_name LIKE %s)"
             params.extend([f'%{search}%', f'%{search}%'])
         
         if cert_type:
-            base_sql += " AND cert_type = %s"
+            base_sql += " AND c.cert_type = %s"
             params.append(cert_type)
+        
+        if project_id:
+            base_sql += " AND c.project_id = %s"
+            params.append(project_id)
         
         # 查询总数
         count_sql = f"SELECT COUNT(*) as total {base_sql}"
@@ -195,15 +202,16 @@ def get_certs():
         # 查询分页数据
         data_sql = f"""
             SELECT 
-                id, domain, project_name, cert_type, issuer, 
-                cert_generate_time, cert_valid_days, cert_expire_time,
-                DATEDIFF(cert_expire_time, NOW()) as remaining_days,
-                brand, cost, status, last_check_time, last_notify_time, 
-                notify_status, source, aliyun_account_id, remark,
-                has_cert_file, cert_file_path, key_file_path,
-                created_at, updated_at
+                c.id, c.domain, c.cert_type, c.issuer, 
+                c.cert_generate_time, c.cert_valid_days, c.cert_expire_time,
+                DATEDIFF(c.cert_expire_time, NOW()) as remaining_days,
+                c.brand, c.cost, c.status, c.last_check_time, c.last_notify_time, 
+                c.notify_status, c.source, c.aliyun_account_id, c.remark,
+                c.has_cert_file, c.cert_file_path, c.key_file_path,
+                c.created_at, c.updated_at, c.project_id,
+                p.project_name as project_name
             {base_sql}
-            ORDER BY cert_expire_time ASC, id DESC
+            ORDER BY c.cert_expire_time ASC, c.id DESC
             LIMIT %s OFFSET %s
         """
         params.extend([page_size, offset])
@@ -238,8 +246,8 @@ def get_certs():
 def create_cert():
     """
     手动添加证书
-    必填：domain, project_name
-    可选：cert_type, issuer, cert_expire_time, brand, cost, status, remark
+    必填：domain
+    可选：project_id, cert_type, issuer, cert_expire_time, brand, cost, status, remark
     """
     db = get_db()
     cursor = db.cursor()
@@ -248,14 +256,12 @@ def create_cert():
         
         # 验证必填字段
         domain = data.get('domain', '').strip()
-        project_name = data.get('project_name', '').strip()
         
         if not domain:
             return jsonify({'code': 400, 'message': '域名不能为空'}), 400
-        if not project_name:
-            return jsonify({'code': 400, 'message': '项目名称不能为空'}), 400
         
         # 获取可选字段
+        project_id = data.get('project_id')
         cert_type = data.get('cert_type', 1)  # 默认手动录入
         issuer = data.get('issuer', '')
         cert_expire_time = data.get('cert_expire_time')
@@ -285,13 +291,13 @@ def create_cert():
         # 插入数据
         sql = """
             INSERT INTO ssl_certificates 
-            (domain, project_name, cert_type, issuer, cert_generate_time, 
+            (domain, project_id, cert_type, issuer, cert_generate_time, 
              cert_valid_days, cert_expire_time, remaining_days, brand, 
              cost, status, source, remark, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
         """
         cursor.execute(sql, (
-            domain, project_name, cert_type, issuer, cert_generate_time,
+            domain, project_id, cert_type, issuer, cert_generate_time,
             cert_valid_days, cert_expire_time, remaining_days, brand,
             cost, status, 'manual', remark
         ))
@@ -299,7 +305,7 @@ def create_cert():
         cert_id = cursor.lastrowid
         # 记录操作日志
         log_operation(module='证书管理', action='create', target_id=cert_id, target_name=domain,
-                     detail={'project_name': project_name, 'cert_type': '手动录入'})
+                     detail={'project_id': project_id, 'cert_type': '手动录入'})
         return jsonify({
             'code': 200,
             'message': '创建成功',
@@ -323,7 +329,8 @@ def upload_and_create_cert():
     接收 multipart/form-data:
         - cert_file: 证书文件(.pem/.crt)，必填
         - key_file: 私钥文件(.key)，可选
-        - project_name: 项目名称，必填
+        - project_id: 所属项目ID，可选
+        - project_id: 所属项目ID，可选
         - brand: 品牌，可选
         - cost: 费用，可选
         - remark: 备注，可选
@@ -339,36 +346,33 @@ def upload_and_create_cert():
         
         if not cert_file:
             return jsonify({'code': 400, 'message': '证书文件(cert_file)不能为空'}), 400
-        
+
         # 文件大小限制（10MB）
         max_size = 10 * 1024 * 1024
         if cert_file.content_length > max_size:
             return jsonify({'code': 400, 'message': '证书文件大小不能超过10MB'}), 400
-        
+
         if key_file and key_file.content_length > max_size:
             return jsonify({'code': 400, 'message': '私钥文件大小不能超过10MB'}), 400
-        
+
         # 文件类型验证
         allowed_cert_extensions = ['.pem', '.crt', '.cer']
         allowed_key_extensions = ['.key']
-        
+
         cert_filename = cert_file.filename
         if not any(cert_filename.lower().endswith(ext) for ext in allowed_cert_extensions):
             return jsonify({'code': 400, 'message': '证书文件只能是 .pem, .crt, .cer 格式'}), 400
-        
+
         if key_file:
             key_filename = key_file.filename
             if not any(key_filename.lower().endswith(ext) for ext in allowed_key_extensions):
                 return jsonify({'code': 400, 'message': '私钥文件只能是 .key 格式'}), 400
-        
+
         # 获取表单字段
-        project_name = request.form.get('project_name', '').strip()
         brand = request.form.get('brand', '').strip()
         cost = request.form.get('cost')
         remark = request.form.get('remark', '').strip()
-        
-        if not project_name:
-            return jsonify({'code': 400, 'message': '项目名称不能为空'}), 400
+        project_id = request.form.get('project_id')  # 推荐使用
         
         # 读取证书文件内容
         cert_content = cert_file.read().decode('utf-8')
@@ -393,16 +397,16 @@ def upload_and_create_cert():
         
         # 插入证书记录
         sql = """
-            INSERT INTO ssl_certificates 
-            (domain, project_name, cert_type, issuer, cert_generate_time, 
+            INSERT INTO ssl_certificates
+            (domain, cert_type, issuer, cert_generate_time, 
              cert_valid_days, cert_expire_time, remaining_days, brand, 
-             cost, status, source, remark, has_cert_file, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, NOW(), NOW())
+             cost, status, source, remark, has_cert_file, project_id, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, NOW(), NOW())
         """
         cursor.execute(sql, (
-            domain, project_name, 1, issuer, cert_generate_time,
+            domain, 1, issuer, cert_generate_time,
             cert_valid_days, cert_expire_time, remaining_days, brand,
-            cost, status, 'upload', remark
+            cost, status, 'upload', remark, project_id
         ))
         db.commit()
         cert_id = cursor.lastrowid
@@ -485,7 +489,7 @@ def update_cert(cert_id):
         # 可更新的字段映射
         field_mapping = {
             'domain': 'domain',
-            'project_name': 'project_name',
+            'project_id': 'project_id',
             'cert_type': 'cert_type',
             'issuer': 'issuer',
             'cert_generate_time': 'cert_generate_time',
@@ -596,7 +600,7 @@ def batch_check_certs():
         if cert_ids:
             placeholders = ','.join(['%s'] * len(cert_ids))
             sql = f"""
-                SELECT id, domain, project_name, cert_type 
+                SELECT id, domain, cert_type 
                 FROM ssl_certificates 
                 WHERE id IN ({placeholders})
             """
@@ -604,7 +608,7 @@ def batch_check_certs():
         else:
             # 检测所有自动检测类型的证书 (cert_type=0)
             sql = """
-                SELECT id, domain, project_name, cert_type 
+                SELECT id, domain, cert_type 
                 FROM ssl_certificates 
                 WHERE cert_type = 0
             """
@@ -714,7 +718,7 @@ def check_single_cert(cert_id):
     try:
         # 获取证书信息
         cursor.execute(
-            "SELECT id, domain, project_name FROM ssl_certificates WHERE id = %s",
+            "SELECT id, domain FROM ssl_certificates WHERE id = %s",
             (cert_id,)
         )
         cert = cursor.fetchone()
@@ -941,20 +945,18 @@ def sync_aliyun_certs():
                         logger.warning(f"下载阿里云证书文件失败: {domain} - {e}")
                 continue
 
-            # 插入新证书
+            # 插入新证书（project_name 留空，由用户手动关联项目）
             insert_sql = """
                 INSERT INTO ssl_certificates
-                (domain, project_name, cert_type, issuer, cert_generate_time,
+                (domain, cert_type, issuer, cert_generate_time,
                  cert_valid_days, cert_expire_time, remaining_days,
                  source, aliyun_account_id, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """
-            project_name = f"阿里云证书 - {domain}"
             status = 1 if cert_info['remaining_days'] > 0 else 0
 
             cursor.execute(insert_sql, (
                 domain,
-                project_name,
                 2,  # cert_type = 2: 阿里云证书
                 cert_info['issuer'],
                 cert_info['not_before'],
@@ -1052,10 +1054,11 @@ def trigger_notify():
         
         # 查询即将过期的证书
         sql = """
-            SELECT id, domain, project_name, remaining_days, cert_expire_time
-            FROM ssl_certificates 
-            WHERE remaining_days <= %s AND status = 1
-            ORDER BY remaining_days ASC
+            SELECT c.id, c.domain, p.project_name, c.remaining_days, c.cert_expire_time
+            FROM ssl_certificates c
+            LEFT JOIN projects p ON c.project_id = p.id
+            WHERE c.remaining_days <= %s AND c.status = 1
+            ORDER BY c.remaining_days ASC
         """
         cursor.execute(sql, (warning_days,))
         certs = cursor.fetchall()

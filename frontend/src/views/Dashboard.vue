@@ -104,21 +104,37 @@
     <!-- 第三行：证书概览 + 到期提醒 -->
     <el-row :gutter="16" class="cert-row">
       <el-col :span="6" :xs="24" :sm="24" :md="6" :lg="6">
-        <el-card class="cert-summary-card" @click="$router.push('/certs')">
+        <el-card class="cert-summary-card">
           <div class="cert-summary-content">
-            <div class="cert-stat-item">
-              <el-icon :size="32" class="cert-icon"><Document /></el-icon>
-              <div class="cert-stat-info">
-                <div class="cert-stat-value">{{ stats.counts?.certs || 0 }}</div>
-                <div class="cert-stat-label">SSL证书总数</div>
+            <div class="cert-grid">
+              <div class="cert-grid-item">
+                <el-icon :size="32" class="cert-icon"><Link /></el-icon>
+                <div class="cert-stat-info">
+                  <div class="cert-stat-value">{{ stats.counts?.domains || 0 }}</div>
+                  <div class="cert-stat-label">域名总数</div>
+                </div>
               </div>
-            </div>
-            <el-divider />
-            <div class="cert-stat-item expiring">
-              <el-icon :size="32" class="cert-icon warning"><Warning /></el-icon>
-              <div class="cert-stat-info">
-                <div class="cert-stat-value warning">{{ stats.counts?.expiring_certs || 0 }}</div>
-                <div class="cert-stat-label">即将过期</div>
+              <div class="cert-grid-item">
+                <el-icon :size="32" class="cert-icon"><Document /></el-icon>
+                <div class="cert-stat-info">
+                  <div class="cert-stat-value">{{ stats.counts?.certs || 0 }}</div>
+                  <div class="cert-stat-label">证书总数</div>
+                </div>
+              </div>
+              <div class="cert-grid-divider"></div>
+              <div class="cert-grid-item">
+                <el-icon :size="32" class="cert-icon warning"><Warning /></el-icon>
+                <div class="cert-stat-info">
+                  <div class="cert-stat-value warning">{{ stats.counts?.expiring_domains || 0 }}</div>
+                  <div class="cert-stat-label">即将过期</div>
+                </div>
+              </div>
+              <div class="cert-grid-item">
+                <el-icon :size="32" class="cert-icon warning"><Warning /></el-icon>
+                <div class="cert-stat-info">
+                  <div class="cert-stat-value warning">{{ stats.counts?.expiring_certs || 0 }}</div>
+                  <div class="cert-stat-label">即将过期</div>
+                </div>
               </div>
             </div>
           </div>
@@ -506,7 +522,7 @@ function initProjectChart() {
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}个 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)'
     },
     legend: {
       bottom: '0',
@@ -702,7 +718,6 @@ function getDaysTagType(days: any) {
 .cert-summary-card {
   height: 100%;
   min-height: 350px;
-  cursor: pointer;
   transition: transform 0.3s, box-shadow 0.3s;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
@@ -728,15 +743,27 @@ function getDaysTagType(days: any) {
   padding: 24px;
 }
 
-.cert-stat-item {
-  display: flex;
-  align-items: center;
+.cert-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr auto 1fr;
   gap: 16px;
-  padding: 20px 0;
+  height: 100%;
+  align-items: center;
 }
 
-.cert-stat-item.expiring {
-  padding-bottom: 0;
+.cert-grid-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.cert-grid-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: rgba(255,255,255,0.2);
+  margin: 8px 0;
 }
 
 .cert-icon {
@@ -766,11 +793,6 @@ function getDaysTagType(days: any) {
   font-size: 14px;
   color: rgba(255,255,255,0.7);
   margin-top: 4px;
-}
-
-.cert-summary-card :deep(.el-divider) {
-  margin: 16px 0;
-  border-color: rgba(255,255,255,0.2);
 }
 
 /* 表格卡片样式 */

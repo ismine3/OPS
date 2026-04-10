@@ -4,6 +4,10 @@ export function getProjects(params: Record<string, any>) {
   return request.get('/projects', { params })
 }
 
+export function getProjectOptions() {
+  return request.get('/projects/options')
+}
+
 export function getProjectDetail(id: number | string) {
   return request.get(`/projects/${id}`)
 }

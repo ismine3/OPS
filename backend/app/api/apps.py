@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.validators import validate_url, validate_string_length
 from ..utils.password_utils import encrypt_data, decrypt_data
@@ -13,6 +13,7 @@ apps_bp = Blueprint('apps', __name__, url_prefix='/api/accounts')
 
 @apps_bp.route('/<int:app_id>', methods=['GET'])
 @jwt_required
+@module_required('apps')
 def get_app_detail(app_id):
     """
     获取应用系统详情
@@ -46,6 +47,7 @@ def get_app_detail(app_id):
 
 @apps_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('apps')
 def get_apps():
     """
     获取应用系统列表
@@ -118,6 +120,7 @@ def get_apps():
 
 @apps_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('apps')
 @role_required(['admin', 'operator'])
 def create_app():
     """
@@ -215,6 +218,7 @@ def create_app():
 
 @apps_bp.route('/<int:app_id>', methods=['PUT'])
 @jwt_required
+@module_required('apps')
 @role_required(['admin', 'operator'])
 def update_app(app_id):
     """
@@ -309,6 +313,7 @@ def update_app(app_id):
 
 @apps_bp.route('/<int:app_id>', methods=['DELETE'])
 @jwt_required
+@module_required('apps')
 @role_required(['admin', 'operator'])
 def delete_app(app_id):
     """

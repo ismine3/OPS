@@ -6,6 +6,7 @@ interface UserInfo {
   role?: string
   display_name?: string
   username?: string
+  modules?: string[]
   [key: string]: any
 }
 
@@ -25,6 +26,12 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userInfo.value.role === 'admin')
   const displayName = computed(() => userInfo.value.display_name || userInfo.value.username || '')
+  const authorizedModules = computed(() => userInfo.value.modules || [])
+
+  function hasModuleAccess(moduleCode: string): boolean {
+    if (userInfo.value.role === 'admin') return true
+    return (userInfo.value.modules || []).includes(moduleCode)
+  }
 
   function setToken(newToken: string) {
     token.value = newToken
@@ -52,5 +59,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('userInfo')
   }
 
-  return { token, userInfo, isLoggedIn, isAdmin, displayName, setToken, setUserInfo, fetchProfile, logout }
+  return { token, userInfo, isLoggedIn, isAdmin, displayName, authorizedModules, hasModuleAccess, setToken, setUserInfo, fetchProfile, logout }
 })

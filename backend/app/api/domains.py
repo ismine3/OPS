@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify, current_app
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.ssl_checker import send_domain_expiry_notification
 from ..utils.operation_log import log_operation
 from ..utils.password_utils import decrypt_data
@@ -33,6 +33,7 @@ def create_aliyun_client(access_key_id, access_key_secret):
 
 @domains_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('domains')
 def get_domains():
     """
     获取域名列表（分页）
@@ -112,6 +113,7 @@ def get_domains():
 
 @domains_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('domains')
 @role_required(['admin', 'operator'])
 def create_domain():
     """
@@ -199,6 +201,7 @@ def create_domain():
 
 @domains_bp.route('/<int:domain_id>', methods=['PUT'])
 @jwt_required
+@module_required('domains')
 @role_required(['admin', 'operator'])
 def update_domain(domain_id):
     """
@@ -291,6 +294,7 @@ def update_domain(domain_id):
 
 @domains_bp.route('/<int:domain_id>', methods=['DELETE'])
 @jwt_required
+@module_required('domains')
 @role_required(['admin', 'operator'])
 def delete_domain(domain_id):
     """
@@ -334,6 +338,7 @@ def delete_domain(domain_id):
 
 @domains_bp.route('/sync-aliyun', methods=['POST'])
 @jwt_required
+@module_required('domains')
 @role_required(['admin', 'operator'])
 def sync_aliyun_domains():
     """
@@ -595,6 +600,7 @@ def sync_aliyun_domains():
 
 @domains_bp.route('/notify', methods=['POST'])
 @jwt_required
+@module_required('domains')
 @role_required(['admin', 'operator'])
 def trigger_domain_notify():
     """

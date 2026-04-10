@@ -5,7 +5,7 @@
       <el-form :model="searchParams" inline>
         <el-form-item label="所属项目">
           <el-select v-model="searchParams.project_id" placeholder="所属项目" clearable style="width: 160px">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -111,7 +111,7 @@
         </el-row>
         <el-form-item label="所属项目" prop="project_id">
           <el-select v-model="form.project_id" placeholder="请选择项目" clearable style="width: 100%">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="备注" prop="remark">
@@ -131,7 +131,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getApps, createApp, updateApp, deleteApp } from '../api/apps'
-import { getProjects } from '../api/projects'
+import { getProjectOptions } from '../api/projects'
 import PasswordDisplay from '../components/PasswordDisplay.vue'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, urlValidator, isSafeSearch } from '@/utils/validators'
@@ -204,8 +204,8 @@ onMounted(() => {
 
 async function fetchProjects() {
   try {
-    const res = await getProjects({ per_page: 1000 })
-    projectList.value = res.data?.items || res.data || []
+    const res = await getProjectOptions()
+    projectList.value = res.data || []
   } catch (e) {
     console.error('获取项目列表失败', e)
   }

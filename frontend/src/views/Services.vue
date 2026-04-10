@@ -15,7 +15,7 @@
         </el-form-item>
         <el-form-item label="所属项目">
           <el-select v-model="searchParams.project_id" placeholder="所属项目" clearable style="width: 160px">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -90,7 +90,7 @@
             <el-option 
               v-for="server in serverList" 
               :key="server.id" 
-              :label="`${server.inner_ip} (${server.hostname})`" 
+              :label="`${server.inner_ip} (${server.name})`" 
               :value="server.id" 
             />
           </el-select>
@@ -125,7 +125,7 @@
         </el-row>
         <el-form-item label="所属项目" prop="project_id">
           <el-select v-model="form.project_id" placeholder="请选择项目" clearable style="width: 100%">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="备注" prop="remark">
@@ -145,9 +145,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getServices, createService, updateService, deleteService } from '../api/services'
-import { getServerList } from '../api/servers'
+import { getServerOptions } from '../api/servers'
 import { getEnvTypes, getServiceCategories } from '../api/dicts'
-import { getProjects } from '../api/projects'
+import { getProjectOptions } from '../api/projects'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, portValidator, isSafeSearch } from '@/utils/validators'
 
@@ -220,8 +220,8 @@ onMounted(() => {
 
 async function fetchProjects() {
   try {
-    const res = await getProjects({ per_page: 1000 })
-    projectList.value = res.data?.items || res.data || []
+    const res = await getProjectOptions()
+    projectList.value = res.data || []
   } catch (e) {
     console.error('获取项目列表失败', e)
   }
@@ -248,7 +248,7 @@ async function fetchData() {
 
 async function fetchServerList() {
   try {
-    const res = await getServerList()
+    const res = await getServerOptions()
     serverList.value = res.data || []
   } catch (e) {
     console.error('获取服务器列表失败', e)
@@ -307,11 +307,23 @@ async function handleSubmit() {
   
   submitLoading.value = true
   try {
+    // 构建提交数据，确保字段类型正确
+    const submitData = {
+      server_id: Number(form.server_id) || null,
+      category: form.category,
+      service_name: form.service_name,
+      version: form.version,
+      inner_port: form.inner_port,
+      mapped_port: form.mapped_port,
+      project_id: form.project_id,
+      remark: form.remark
+    }
+    
     if (editingId.value) {
-      await updateService(editingId.value, form)
+      await updateService(editingId.value, submitData)
       ElMessage.success('更新成功')
     } else {
-      await createService(form)
+      await createService(submitData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

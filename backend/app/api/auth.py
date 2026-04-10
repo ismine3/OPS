@@ -4,10 +4,11 @@
 from flask import Blueprint, request, jsonify, g
 from ..utils.password_utils import verify_password, hash_password
 
-from ..models.user import get_user_by_username, update_password
+from ..models.user import get_user_by_username, update_password, get_user_by_id
 from ..utils.auth import generate_token
 from ..utils.decorators import jwt_required
 from ..utils.operation_log import log_operation
+from ..models.role_module import get_modules_by_role, get_available_modules
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -80,6 +81,12 @@ def login():
     except RuntimeError as e:
         return jsonify({'code': 500, 'message': str(e)}), 500
 
+    # 根据角色获取模块权限
+    if user['role'] == 'admin':
+        modules = [m['code'] for m in get_available_modules()]
+    else:
+        modules = get_modules_by_role(user['role'])
+
     return jsonify({
         'code': 200,
         'message': '登录成功',
@@ -90,7 +97,8 @@ def login():
                 'username': user['username'],
                 'display_name': user['display_name'],
                 'role': user['role']
-            }
+            },
+            'modules': modules
         }
     }), 200
 
@@ -102,10 +110,8 @@ def get_profile():
     获取当前用户信息
     需要 JWT 认证
     
-    返回: {"code": 200, "data": {id, username, display_name, role, is_active, created_at}}
+    返回: {"code": 200, "data": {id, username, display_name, role, is_active, created_at, modules}}
     """
-    from ..models.user import get_user_by_id
-    
     user_id = g.current_user['user_id']
     user = get_user_by_id(user_id)
     
@@ -114,7 +120,13 @@ def get_profile():
             'code': 404,
             'message': '用户不存在'
         }), 404
-    
+
+    # 根据角色获取模块权限
+    if user['role'] == 'admin':
+        modules = [m['code'] for m in get_available_modules()]
+    else:
+        modules = get_modules_by_role(user['role'])
+
     return jsonify({
         'code': 200,
         'data': {
@@ -123,7 +135,8 @@ def get_profile():
             'display_name': user['display_name'],
             'role': user['role'],
             'is_active': user['is_active'],
-            'created_at': user['created_at'].isoformat() if user['created_at'] else None
+            'created_at': user['created_at'].isoformat() if user['created_at'] else None,
+            'modules': modules
         }
     }), 200
 

@@ -160,3 +160,54 @@ def role_required(roles):
         return decorated_function
 
     return decorator
+
+
+def module_required(module_code):
+    """
+    模块访问权限检查装饰器（须在 @jwt_required 之后使用）
+    - admin角色直接通过（bypass）
+    - 其他角色检查 role_modules 表中是否有对应模块权限
+    - 无权限返回 403
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not hasattr(g, "current_user"):
+                return (
+                    jsonify(
+                        {
+                            "code": 401,
+                            "message": "未进行 JWT 认证",
+                        }
+                    ),
+                    401,
+                )
+
+            user_role = g.current_user.get("role")
+
+            # admin角色直接通过
+            if user_role == "admin":
+                return f(*args, **kwargs)
+
+            # 延迟导入避免循环依赖
+            from ..models.role_module import get_modules_by_role
+
+            # 检查模块权限
+            allowed_modules = get_modules_by_role(user_role)
+            if module_code not in allowed_modules:
+                return (
+                    jsonify(
+                        {
+                            "code": 403,
+                            "message": "无模块访问权限",
+                        }
+                    ),
+                    403,
+                )
+
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator

@@ -6,7 +6,7 @@ import datetime
 import shutil
 from werkzeug.utils import secure_filename
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.scheduler import (
     add_task_to_scheduler,
@@ -104,6 +104,7 @@ def allowed_script_file(filename):
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('tasks')
 def get_tasks():
     """获取任务列表"""
     db = get_db()
@@ -143,6 +144,7 @@ def get_tasks():
 
 @tasks_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('tasks')
 @role_required(['admin', 'operator'])
 def create_task():
     """创建任务"""
@@ -256,6 +258,7 @@ def create_task():
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @jwt_required
+@module_required('tasks')
 @role_required(['admin', 'operator'])
 def update_task(task_id):
     """更新任务"""
@@ -377,6 +380,7 @@ def update_task(task_id):
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @jwt_required
+@module_required('tasks')
 @role_required(['admin', 'operator'])
 def delete_task(task_id):
     """删除任务"""
@@ -434,6 +438,7 @@ def delete_task(task_id):
 
 @tasks_bp.route('/<int:task_id>/toggle', methods=['POST'])
 @jwt_required
+@module_required('tasks')
 @role_required(['admin', 'operator'])
 def toggle_task(task_id):
     """启用/禁用任务"""
@@ -497,6 +502,7 @@ def toggle_task(task_id):
 
 @tasks_bp.route('/<int:task_id>/run', methods=['POST'])
 @jwt_required
+@module_required('tasks')
 @role_required(['admin', 'operator'])
 def run_task(task_id):
     """手动执行任务"""
@@ -632,6 +638,7 @@ def run_task(task_id):
 
 @tasks_bp.route('/<int:task_id>/logs', methods=['GET'])
 @jwt_required
+@module_required('tasks')
 def get_task_logs(task_id):
     """获取任务执行日志"""
     db = get_db()

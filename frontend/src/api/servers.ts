@@ -4,6 +4,10 @@ export function getServers(params: Record<string, any>) {
   return request.get('/servers', { params })
 }
 
+export function getServerOptions() {
+  return request.get('/servers/options')
+}
+
 export function getServerDetail(id: number | string) {
   return request.get(`/servers/${id}`)
 }

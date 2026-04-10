@@ -130,6 +130,7 @@ def register_blueprints(app):
     from .api.operation_logs import logs_bp
     from .api.monitoring import monitoring_bp
     from .api.projects import projects_bp
+    from .api.role_modules import role_modules_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
@@ -146,3 +147,4 @@ def register_blueprints(app):
     app.register_blueprint(logs_bp)
     app.register_blueprint(monitoring_bp)
     app.register_blueprint(projects_bp)
+    app.register_blueprint(role_modules_bp)

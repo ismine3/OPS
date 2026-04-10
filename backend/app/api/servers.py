@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.validators import validate_ip, validate_hostname, validate_string_length
 from ..utils.password_utils import encrypt_data, decrypt_data
@@ -13,6 +13,7 @@ servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
 
 @servers_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('servers')
 def get_servers():
     """
     获取服务器列表
@@ -113,8 +114,29 @@ def get_servers():
     finally:
         cursor.close()
 
+
+@servers_bp.route('/options', methods=['GET'])
+@jwt_required
+def get_server_options():
+    """
+    获取服务器选项列表（供其他模块下拉选择，仅需登录认证）
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT id, hostname AS name, inner_ip FROM servers ORDER BY env_type, hostname")
+        servers = cursor.fetchall()
+        return jsonify({
+            'code': 200,
+            'data': servers
+        })
+    finally:
+        cursor.close()
+
+
 @servers_bp.route('/<int:server_id>', methods=['GET'])
 @jwt_required
+@module_required('servers')
 def get_server_detail(server_id):
     """
     获取服务器详情（含关联服务列表）
@@ -170,6 +192,7 @@ def get_server_detail(server_id):
 
 @servers_bp.route('/list', methods=['GET'])
 @jwt_required
+@module_required('servers')
 def get_servers_list():
     """
     获取所有服务器简要信息（供下拉框使用）
@@ -188,6 +211,7 @@ def get_servers_list():
 
 @servers_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('servers')
 @role_required(['admin', 'operator'])
 def create_server():
     """
@@ -355,6 +379,7 @@ def create_server():
 
 @servers_bp.route('/<int:server_id>', methods=['PUT'])
 @jwt_required
+@module_required('servers')
 @role_required(['admin', 'operator'])
 def update_server(server_id):
     """
@@ -535,6 +560,7 @@ def update_server(server_id):
 
 @servers_bp.route('/<int:server_id>', methods=['DELETE'])
 @jwt_required
+@module_required('servers')
 @role_required(['admin', 'operator'])
 def delete_server(server_id):
     """

@@ -68,8 +68,12 @@ async function handleLogin() {
   loading.value = true
   try {
     const res = await login(form)
-    userStore.setToken(res.data.token)
-    userStore.setUserInfo(res.data.user)
+    const { token, user, modules } = res.data
+    userStore.setToken(token)
+    userStore.setUserInfo({
+      ...user,
+      modules: modules || []
+    })
     ElMessage.success('登录成功')
     router.push('/dashboard')
   } catch (e) {

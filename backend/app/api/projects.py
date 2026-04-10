@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.password_utils import decrypt_data
 
@@ -12,6 +12,7 @@ projects_bp = Blueprint('projects', __name__, url_prefix='/api')
 
 @projects_bp.route('/projects', methods=['GET'])
 @jwt_required
+@module_required('projects')
 def get_projects():
     """
     获取项目列表
@@ -86,8 +87,28 @@ def get_projects():
         cursor.close()
 
 
+@projects_bp.route('/projects/options', methods=['GET'])
+@jwt_required
+def get_project_options():
+    """
+    获取项目选项列表（供其他模块下拉选择，仅需登录认证）
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT id, project_name AS name FROM projects ORDER BY id DESC")
+        projects = cursor.fetchall()
+        return jsonify({
+            'code': 200,
+            'data': projects
+        })
+    finally:
+        cursor.close()
+
+
 @projects_bp.route('/projects', methods=['POST'])
 @jwt_required
+@module_required('projects')
 @role_required(['admin', 'operator'])
 def create_project():
     """
@@ -152,6 +173,7 @@ def create_project():
 
 @projects_bp.route('/projects/<int:project_id>', methods=['GET'])
 @jwt_required
+@module_required('projects')
 def get_project_detail(project_id):
     """
     获取项目详情，聚合返回关联资源
@@ -260,6 +282,7 @@ def get_project_detail(project_id):
 
 @projects_bp.route('/projects/<int:project_id>', methods=['PUT'])
 @jwt_required
+@module_required('projects')
 @role_required(['admin', 'operator'])
 def update_project(project_id):
     """
@@ -338,6 +361,7 @@ def update_project(project_id):
 
 @projects_bp.route('/projects/<int:project_id>', methods=['DELETE'])
 @jwt_required
+@module_required('projects')
 @role_required(['admin', 'operator'])
 def delete_project(project_id):
     """
@@ -384,6 +408,7 @@ def delete_project(project_id):
 
 @projects_bp.route('/projects/<int:project_id>/servers', methods=['POST'])
 @jwt_required
+@module_required('projects')
 @role_required(['admin', 'operator'])
 def add_project_servers(project_id):
     """
@@ -467,6 +492,7 @@ def add_project_servers(project_id):
 
 @projects_bp.route('/projects/<int:project_id>/servers/<int:server_id>', methods=['DELETE'])
 @jwt_required
+@module_required('projects')
 @role_required(['admin', 'operator'])
 def remove_project_server(project_id, server_id):
     """

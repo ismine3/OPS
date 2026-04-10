@@ -15,7 +15,7 @@
         </el-form-item>
         <el-form-item label="所属项目">
           <el-select v-model="searchParams.project_id" placeholder="全部项目" clearable style="width: 180px">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -173,7 +173,7 @@
         </el-form-item>
         <el-form-item label="所属项目">
           <el-select v-model="form.project_ids" multiple placeholder="请选择所属项目" style="width: 100%">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.project_name" :value="p.id" />
+            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="备注" prop="remark">
@@ -195,7 +195,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getServers, createServer, updateServer, deleteServer } from '../api/servers'
 import { getEnvTypes, getPlatforms } from '../api/dicts'
-import { getProjects } from '../api/projects'
+import { getProjectOptions } from '../api/projects'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { ipValidator, safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
@@ -329,8 +329,8 @@ async function fetchDicts() {
 
 async function fetchProjects() {
   try {
-    const res = await getProjects({ page: 1, page_size: 1000 })
-    projectList.value = res.data.items || []
+    const res = await getProjectOptions()
+    projectList.value = res.data || []
   } catch (e) {
     console.error('加载项目列表失败', e)
   }

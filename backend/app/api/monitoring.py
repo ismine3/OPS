@@ -3,13 +3,14 @@
 """
 import json
 from flask import Blueprint, jsonify, current_app
-from ..utils.decorators import jwt_required
+from ..utils.decorators import jwt_required, module_required
 
 monitoring_bp = Blueprint('monitoring', __name__, url_prefix='/api/monitoring')
 
 
 @monitoring_bp.route('/config', methods=['GET'])
 @jwt_required
+@module_required('monitoring')
 def get_config():
     """
     获取 Grafana 监控配置

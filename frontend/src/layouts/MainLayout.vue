@@ -19,35 +19,35 @@
           <el-icon><Odometer /></el-icon>
           <template #title>仪表盘</template>
         </el-menu-item>
-        <el-menu-item index="/monitoring">
+        <el-menu-item index="/monitoring" v-if="userStore.hasModuleAccess('monitoring')">
           <el-icon><DataLine /></el-icon>
           <template #title>监控中心</template>
         </el-menu-item>
-        <el-menu-item index="/projects">
+        <el-menu-item index="/projects" v-if="userStore.hasModuleAccess('projects')">
           <el-icon><Folder /></el-icon>
           <template #title>项目管理</template>
         </el-menu-item>
-        <el-menu-item index="/servers">
+        <el-menu-item index="/servers" v-if="userStore.hasModuleAccess('servers')">
           <el-icon><Monitor /></el-icon>
           <template #title>服务器管理</template>
         </el-menu-item>
-        <el-menu-item index="/services">
+        <el-menu-item index="/services" v-if="userStore.hasModuleAccess('services')">
           <el-icon><SetUp /></el-icon>
           <template #title>服务管理</template>
         </el-menu-item>
-        <el-menu-item index="/accounts">
+        <el-menu-item index="/accounts" v-if="userStore.hasModuleAccess('apps')">
           <el-icon><Grid /></el-icon>
           <template #title>账号管理</template>
         </el-menu-item>
-        <el-menu-item index="/domains">
+        <el-menu-item index="/domains" v-if="userStore.hasModuleAccess('domains')">
           <el-icon><Link /></el-icon>
           <template #title>域名管理</template>
         </el-menu-item>
-        <el-menu-item index="/certs">
+        <el-menu-item index="/certs" v-if="userStore.hasModuleAccess('certs')">
           <el-icon><Document /></el-icon>
           <template #title>证书管理</template>
         </el-menu-item>
-        <el-menu-item index="/tasks">
+        <el-menu-item index="/tasks" v-if="userStore.hasModuleAccess('tasks')">
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
         </el-menu-item>
@@ -57,7 +57,7 @@
         </el-menu-item>
         <el-menu-item v-if="userStore.isAdmin" index="/users">
           <el-icon><UserFilled /></el-icon>
-          <template #title>用户管理</template>
+          <template #title>用户与角色管理</template>
         </el-menu-item>
         <el-menu-item index="/operation-logs">
           <el-icon><List /></el-icon>

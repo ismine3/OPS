@@ -1734,4 +1734,30 @@ CREATE TABLE `users`  (
 -- ----------------------------
 INSERT INTO `users` VALUES (30, 'admin', '$2b$12$EdHpY96uGEnXQfkVrIeqyeLOuG1xDubku.qK0Le25APC8guCNkR.y', '系统管理员', 'admin', 1, '2026-04-03 05:58:17', '2026-04-07 08:26:09', '2026-04-07 08:26:09');
 
+-- ----------------------------
+-- Table structure for role_modules
+-- ----------------------------
+DROP TABLE IF EXISTS `role_modules`;
+CREATE TABLE `role_modules` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `role` varchar(50) NOT NULL COMMENT '角色: operator/viewer',
+  `module` varchar(50) NOT NULL COMMENT '模块编码',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_role_module` (`role`, `module`),
+  INDEX `idx_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色模块授权表';
+
+-- ----------------------------
+-- Records of role_modules
+-- ----------------------------
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'servers');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'services');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'apps');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'domains');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'certs');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'projects');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'monitoring');
+INSERT INTO `role_modules` (`role`, `module`) VALUES ('operator', 'tasks');
+
 SET FOREIGN_KEY_CHECKS = 1;

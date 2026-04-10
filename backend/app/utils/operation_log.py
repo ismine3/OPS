@@ -152,6 +152,7 @@ MODULE_NAMES = {
     "users": "用户管理",
     "aliyun_accounts": "凭证管理",
     "tasks": "定时任务",
+    "role_modules": "角色授权",
 }
 
 ACTION_NAMES = {

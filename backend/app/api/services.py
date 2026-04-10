@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 
 services_bp = Blueprint('services', __name__, url_prefix='/api/services')
@@ -11,6 +11,7 @@ services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 
 @services_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('services')
 def get_services():
     """
     获取服务列表
@@ -90,6 +91,7 @@ def get_services():
 
 @services_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('services')
 @role_required(['admin', 'operator'])
 def create_service():
     """
@@ -129,6 +131,7 @@ def create_service():
 
 @services_bp.route('/<int:service_id>', methods=['PUT'])
 @jwt_required
+@module_required('services')
 @role_required(['admin', 'operator'])
 def update_service(service_id):
     """
@@ -172,6 +175,7 @@ def update_service(service_id):
 
 @services_bp.route('/<int:service_id>', methods=['DELETE'])
 @jwt_required
+@module_required('services')
 @role_required(['admin', 'operator'])
 def delete_service(service_id):
     """

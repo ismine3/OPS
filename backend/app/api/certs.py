@@ -11,7 +11,7 @@ import shutil
 import paramiko
 from flask import Blueprint, request, jsonify, current_app, send_file
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required, role_required
+from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.ssl_checker import get_ssl_cert_info, scan_aliyun_certs, send_wechat_notification
 from ..utils.operation_log import log_operation
 from ..utils.password_utils import decrypt_data
@@ -153,6 +153,7 @@ def _get_safe_cert_dir(cert_id):
 
 @certs_bp.route('', methods=['GET'])
 @jwt_required
+@module_required('certs')
 def get_certs():
     """
     获取证书列表（分页）
@@ -242,6 +243,7 @@ def get_certs():
 
 @certs_bp.route('', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def create_cert():
     """
@@ -322,6 +324,7 @@ def create_cert():
 
 @certs_bp.route('/upload', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def upload_and_create_cert():
     """
@@ -466,6 +469,7 @@ def upload_and_create_cert():
 
 @certs_bp.route('/<int:cert_id>', methods=['PUT'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def update_cert(cert_id):
     """
@@ -547,6 +551,7 @@ def update_cert(cert_id):
 
 @certs_bp.route('/<int:cert_id>', methods=['DELETE'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def delete_cert(cert_id):
     """
@@ -584,6 +589,7 @@ def delete_cert(cert_id):
 
 @certs_bp.route('/check', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def batch_check_certs():
     """
@@ -708,6 +714,7 @@ def batch_check_certs():
 
 @certs_bp.route('/check/<int:cert_id>', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def check_single_cert(cert_id):
     """
@@ -798,6 +805,7 @@ def check_single_cert(cert_id):
 
 @certs_bp.route('/sync-aliyun', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def sync_aliyun_certs():
     """
@@ -1036,6 +1044,7 @@ def sync_aliyun_certs():
 
 @certs_bp.route('/notify', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def trigger_notify():
     """
@@ -1104,6 +1113,7 @@ def trigger_notify():
 
 @certs_bp.route('/<int:cert_id>/upload', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def upload_cert_files(cert_id):
     """
@@ -1194,6 +1204,7 @@ def upload_cert_files(cert_id):
 
 @certs_bp.route('/<int:cert_id>/download', methods=['GET'])
 @jwt_required
+@module_required('certs')
 def download_cert_files(cert_id):
     """
     下载证书文件
@@ -1249,6 +1260,7 @@ def download_cert_files(cert_id):
 
 @certs_bp.route('/<int:cert_id>/files', methods=['DELETE'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def delete_cert_files(cert_id):
     """
@@ -1303,6 +1315,7 @@ def delete_cert_files(cert_id):
 
 @certs_bp.route('/<int:cert_id>/deploy', methods=['POST'])
 @jwt_required
+@module_required('certs')
 @role_required(['admin', 'operator'])
 def deploy_cert(cert_id):
     """

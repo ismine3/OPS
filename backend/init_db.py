@@ -256,6 +256,18 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
     """)
 
+    # 11. 角色模块授权表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `role_modules` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `role` VARCHAR(50) NOT NULL COMMENT '角色: operator/viewer',
+        `module` VARCHAR(50) NOT NULL COMMENT '模块编码',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uk_role_module` (`role`, `module`),
+        INDEX `idx_role` (`role`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色模块授权表';
+    """)
+
     # 插入默认管理员账户
     admin_password_hash = hash_password('admin123')
     cursor.execute("""
@@ -289,6 +301,19 @@ def init_database():
     cursor.execute("""
     INSERT IGNORE INTO `dict_project_statuses` (`name`, `sort_order`) VALUES
     ('运行中', 1), ('已下线', 2), ('规划中', 3)
+    """)
+
+    # 插入 operator 角色默认模块授权（8个模块全授权）
+    cursor.execute("""
+    INSERT IGNORE INTO `role_modules` (`role`, `module`) VALUES
+    ('operator', 'servers'),
+    ('operator', 'services'),
+    ('operator', 'apps'),
+    ('operator', 'domains'),
+    ('operator', 'certs'),
+    ('operator', 'projects'),
+    ('operator', 'monitoring'),
+    ('operator', 'tasks')
     """)
 
     # 14. 云凭证配置表

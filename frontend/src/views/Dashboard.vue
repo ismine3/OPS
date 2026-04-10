@@ -192,6 +192,7 @@ const loading = ref<boolean>(false)
  * @property {number} [domains]
  * @property {number} [certs]
  * @property {number} [expiring_certs]
+ * @property {number} [expiring_domains]
  * @property {number} [projects]
  */
 
@@ -239,6 +240,7 @@ const stats = reactive({
     domains: 0,
     certs: 0,
     expiring_certs: 0,
+    expiring_domains: 0,
     projects: 0
   },
   env_distribution: [] as any[],
@@ -333,10 +335,14 @@ function initEnvChart() {
   
   envChart = echarts.init(envChartRef.value)
   
+  const total = stats.env_distribution.reduce((sum, item) => sum + item.count, 0)
+  
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)',
+      extraCssText: 'z-index: 9999;',
+      appendTo: 'body'
     },
     legend: {
       bottom: '0',
@@ -351,7 +357,7 @@ function initEnvChart() {
     series: [
       {
         type: 'pie',
-        radius: ['0%', '65%'],
+        radius: ['0%', '43%'],
         center: ['50%', '40%'],
         selectedMode: 'single',
         selectedOffset: 15,
@@ -375,10 +381,15 @@ function initEnvChart() {
             fontWeight: 'bold'
           }
         },
-        data: stats.env_distribution.map(item => ({
-          name: item.env_type,
-          value: item.count
-        }))
+        data: stats.env_distribution.map(item => {
+          const percent = total > 0 ? (item.count / total) * 100 : 0
+          return {
+            name: item.env_type,
+            value: item.count,
+            label: { show: percent >= 5 },
+            labelLine: { show: percent >= 5 }
+          }
+        })
       }
     ]
   }
@@ -395,10 +406,14 @@ function initServiceChart() {
   
   serviceChart = echarts.init(serviceChartRef.value)
   
+  const total = stats.service_distribution.reduce((sum, item) => sum + item.count, 0)
+  
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}个 ({d}%)'
+      formatter: '{b}: {c}个 ({d}%)',
+      extraCssText: 'z-index: 9999;',
+      appendTo: 'body'
     },
     legend: {
       bottom: '0',
@@ -413,7 +428,7 @@ function initServiceChart() {
     series: [
       {
         type: 'pie',
-        radius: ['0%', '65%'],
+        radius: ['0%', '43%'],
         center: ['50%', '40%'],
         selectedMode: 'single',
         selectedOffset: 15,
@@ -437,10 +452,15 @@ function initServiceChart() {
             fontWeight: 'bold'
           }
         },
-        data: stats.service_distribution.map(item => ({
-          name: item.category,
-          value: item.count
-        }))
+        data: stats.service_distribution.map(item => {
+          const percent = total > 0 ? (item.count / total) * 100 : 0
+          return {
+            name: item.category,
+            value: item.count,
+            label: { show: percent >= 5 },
+            labelLine: { show: percent >= 5 }
+          }
+        })
       }
     ]
   }
@@ -457,10 +477,14 @@ function initAccountChart() {
   
   accountChart = echarts.init(accountChartRef.value)
   
+  const total = stats.account_distribution.reduce((sum, item) => sum + item.count, 0)
+  
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}个 ({d}%)'
+      formatter: '{b}: {c}个 ({d}%)',
+      extraCssText: 'z-index: 9999;',
+      appendTo: 'body'
     },
     legend: {
       bottom: '0',
@@ -475,7 +499,7 @@ function initAccountChart() {
     series: [
       {
         type: 'pie',
-        radius: ['0%', '65%'],
+        radius: ['0%', '43%'],
         center: ['50%', '40%'],
         selectedMode: 'single',
         selectedOffset: 15,
@@ -499,10 +523,15 @@ function initAccountChart() {
             fontWeight: 'bold'
           }
         },
-        data: stats.account_distribution.map(item => ({
-          name: item.name,
-          value: item.count
-        }))
+        data: stats.account_distribution.map(item => {
+          const percent = total > 0 ? (item.count / total) * 100 : 0
+          return {
+            name: item.name,
+            value: item.count,
+            label: { show: percent >= 5 },
+            labelLine: { show: percent >= 5 }
+          }
+        })
       }
     ]
   }
@@ -519,10 +548,14 @@ function initProjectChart() {
 
   projectChart = echarts.init(projectChartRef.value)
 
+  const total = stats.project_distribution.reduce((sum: number, item: any) => sum + item.count, 0)
+
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)',
+      extraCssText: 'z-index: 9999;',
+      appendTo: 'body'
     },
     legend: {
       bottom: '0',
@@ -537,7 +570,7 @@ function initProjectChart() {
     series: [
       {
         type: 'pie',
-        radius: ['0%', '65%'],
+        radius: ['0%', '43%'],
         center: ['50%', '40%'],
         selectedMode: 'single',
         selectedOffset: 15,
@@ -561,10 +594,15 @@ function initProjectChart() {
             fontWeight: 'bold'
           }
         },
-        data: stats.project_distribution.map((item: any) => ({
-          name: item.project_name,
-          value: item.count
-        }))
+        data: stats.project_distribution.map((item: any) => {
+          const percent = total > 0 ? (item.count / total) * 100 : 0
+          return {
+            name: item.project_name,
+            value: item.count,
+            label: { show: percent >= 5 },
+            labelLine: { show: percent >= 5 }
+          }
+        })
       }
     ]
   }
@@ -679,11 +717,13 @@ function getDaysTagType(days: any) {
   margin-bottom: 16px;
   display: flex;
   flex-wrap: wrap;
+  overflow: visible;
 }
 
 .chart-row > .el-col {
   display: flex;
   margin-bottom: 16px;
+  overflow: visible;
 }
 
 .chart-card {
@@ -691,12 +731,18 @@ function getDaysTagType(days: any) {
   width: 100%;
   display: flex;
   flex-direction: column;
+  overflow: visible;
+}
+
+.chart-card :deep(.el-card__header) {
+  overflow: visible;
 }
 
 .chart-card :deep(.el-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: visible;
 }
 
 .chart-container {

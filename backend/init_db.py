@@ -1,6 +1,8 @@
 """
 数据库初始化脚本 - 创建数据库和表结构
 """
+import os
+import sys
 import pymysql
 from app.utils.password_utils import hash_password
 from app.config import Config
@@ -269,7 +271,12 @@ def init_database():
     """)
 
     # 插入默认管理员账户
-    admin_password_hash = hash_password('admin123')
+    admin_password = os.environ.get('ADMIN_PASSWORD')
+    if not admin_password:
+        print("错误: 未设置 ADMIN_PASSWORD 环境变量")
+        print("请在 docker-compose.yml 中设置 ADMIN_PASSWORD 环境变量")
+        sys.exit(1)
+    admin_password_hash = hash_password(admin_password)
     cursor.execute("""
     INSERT IGNORE INTO `users` (`username`, `password_hash`, `display_name`, `role`, `is_active`)
     VALUES (%s, %s, %s, %s, %s)
@@ -416,7 +423,7 @@ def init_database():
     conn.close()
     
     print("数据库初始化完成！")
-    print("默认管理员账户: admin / admin123")
+    print("默认管理员账户: admin（密码已通过环境变量设置）")
 
 
 if __name__ == '__main__':

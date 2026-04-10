@@ -21,7 +21,7 @@ scheduler = BackgroundScheduler()
 def get_db_config(app):
     """从 app.config 提取数据库配置字典"""
     return {
-        'host': app.config.get('DB_HOST', '192.168.1.124'),
+        'host': app.config.get('DB_HOST', 'localhost'),
         'port': app.config.get('DB_PORT', 3306),
         'user': app.config.get('DB_USER', 'root'),
         'password': app.config.get('DB_PASSWORD', ''),

@@ -10,8 +10,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 
-# 生产环境必须设置 DATA_ENCRYPTION_KEY（Fernet 的 urlsafe base64 32 字节密钥）。
-# 开发可在 FLASK_DEBUG=true 或 OPS_DEV_ENCRYPTION_FALLBACK=true 时使用内置密钥（切勿用于生产）。
+# ============================================================
+# WARNING: 以下密钥仅用于开发环境
+# 生产环境必须通过 DATA_ENCRYPTION_KEY 环境变量设置新密钥
+# 生成命令: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# ============================================================
 _DEV_FERNET_KEY = "ySYNdFtSyLpfGr0F9hptEErhTxLUllX5OR7QpZzrjwg="
 
 

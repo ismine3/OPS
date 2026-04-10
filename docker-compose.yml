@@ -1,8 +1,8 @@
 # 环境变量已直接写在本文件中（不使用根目录 .env）。
 # 生产环境请修改 SECRET_KEY、JWT_SECRET_KEY、DATA_ENCRYPTION_KEY、数据库口令等敏感项。
-#
-# 若使用 Cloudflare 且源站仅开放本 compose 的 80 端口：面板 SSL 请选「灵活」(Flexible)，
-# 否则 CF 用 HTTPS 回源而源站无 443 证书时会出现 502。
+# 
+# 生成 SECRET_KEY/JWT_SECRET_KEY: python -c "import secrets; print(secrets.token_hex(32))"
+# 生成 DATA_ENCRYPTION_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 version: "3.8"
 
@@ -12,10 +12,10 @@ services:
     container_name: ops-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: Pass1234.
-      MYSQL_DATABASE: ops_platform
-      MYSQL_CHARSET: utf8mb4
-      MYSQL_COLLATION: utf8mb4_unicode_ci
+      MYSQL_ROOT_PASSWORD: your-mysql-password  # MySQL root用户密码，生产环境请修改为强密码
+      MYSQL_DATABASE: ops_platform  # 初始化创建的数据库名称
+      MYSQL_CHARSET: utf8mb4  # 数据库默认字符集
+      MYSQL_COLLATION: utf8mb4_unicode_ci  # 数据库默认排序规则
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
@@ -34,31 +34,33 @@ services:
     container_name: ops-backend
     restart: unless-stopped
     environment:
-      FLASK_HOST: "0.0.0.0"
-      FLASK_PORT: "5000"
-      FLASK_DEBUG: "false"
-      SECRET_KEY: "3e5f346fcb9f114056412edefad6d26a4553c133818cdda22b795b2183648c40"
-      JWT_SECRET_KEY: "637cabcec1b41df5164d0b0dd720eefe7594301cbdbbceba441620fe84f4d0df"
-      JWT_EXPIRATION_HOURS: "24"
-      DB_HOST: mysql
-      DB_PORT: "3306"
-      DB_USER: root
-      DB_PASSWORD: Pass1234.
-      DB_NAME: ops_platform
-      CORS_ORIGINS: "http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,https://opm.pepsikey.online"
-      CORS_ALLOW_ALL: "false"
-      DATA_ENCRYPTION_KEY: "O1VNkxEKDSm7lJ_hBFODcMYRO5RCa_KmYlYVv2Bq7Oc="
-      OPS_DEV_ENCRYPTION_FALLBACK: "false"
-      WECHAT_WEBHOOK_URL: ""
-      SSL_CHECK_TIMEOUT: "10"
-      SSL_WARNING_DAYS: "30"
-      DOMAIN_WARNING_DAYS: "30"
-      CERT_AUTO_CHECK_CRON: "0 8 * * *"
-      DOMAIN_AUTO_NOTIFY_CRON: "0 8 * * *"
-      GRAFANA_URL: "https://grafana.huazsz.com"
-      GRAFANA_DASHBOARDS: '[{"name":"主机监控","uid":"StarsL-JOB-node"},{"name":"容器监控","uid":"pMEd7m0Mz"}]'
+      FLASK_HOST: "0.0.0.0"  # Flask监听地址，容器内使用0.0.0.0
+      FLASK_PORT: "5000"  # Flask监听端口
+      FLASK_DEBUG: "false"  # Flask调试模式，生产环境必须为false
+      SECRET_KEY: "your-flask-secret-key"  # Flask会话密钥，生成命令: python -c "import secrets; print(secrets.token_hex(32))"
+      JWT_SECRET_KEY: "your-jwt-secret-key"  # JWT令牌签名密钥，生成命令: python -c "import secrets; print(secrets.token_hex(32))"
+      JWT_EXPIRATION_HOURS: "24"  # JWT令牌有效期（小时）
+      DB_HOST: mysql  # 数据库主机地址，使用Docker服务名
+      DB_PORT: "3306"  # 数据库端口
+      DB_USER: root  # 数据库用户名
+      DB_PASSWORD: your-mysql-password  # 数据库密码，需与MYSQL_ROOT_PASSWORD一致
+      DB_NAME: ops_platform  # 数据库名称，需与MYSQL_DATABASE一致
+      CORS_ORIGINS: "http://localhost:3000"  # CORS跨域允许的前端地址，多个用逗号分隔
+      CORS_ALLOW_ALL: "false"  # 是否允许所有跨域请求，生产环境建议为false
+      DATA_ENCRYPTION_KEY: "your-fernet-encryption-key"  # 敏感数据加密密钥，生成命令: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      OPS_DEV_ENCRYPTION_FALLBACK: "false"  # 开发环境加密回退模式，生产环境必须为false
+      WECHAT_WEBHOOK_URL: ""  # 企业微信机器人Webhook地址，用于告警通知，不使用则留空
+      SSL_CHECK_TIMEOUT: "10"  # SSL证书检查超时时间（秒）
+      SSL_WARNING_DAYS: "30"  # SSL证书到期预警天数，少于此天数将发出警告
+      DOMAIN_WARNING_DAYS: "30"  # 域名到期预警天数，少于此天数将发出警告
+      CERT_AUTO_CHECK_CRON: "0 8 * * *"  # 证书自动检查定时任务，cron表达式（默认每天8:00执行）
+      DOMAIN_AUTO_NOTIFY_CRON: "0 8 * * *"  # 域名自动通知定时任务，cron表达式（默认每天8:00执行）
+      GRAFANA_URL: "https://your-grafana-url"  # Grafana服务地址，用于监控面板集成
+      GRAFANA_DASHBOARDS: '[{"name":"主机监控","uid":"StarsL-JOB-node"},{"name":"容器监控","uid":"pMEd7m0Mz"}]'  # Grafana仪表盘配置，JSON数组格式
+      ADMIN_PASSWORD: your-admin-password  # 管理员初始密码，首次启动时创建admin用户使用，生产环境请修改
     volumes:
       - ./backend/app/uploads:/app/app/uploads
+      - /etc/localtime:/etc/localtime:ro
     ports:
       - "5000:5000"
     networks:
@@ -86,8 +88,11 @@ services:
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # SSL证书目录
+      - /etc/localtime:/etc/localtime:ro
     ports:
-      - "80:80"
+      - "80:80"  # HTTP端口
+      - "443:443"  # HTTPS端口
     networks:
       - ops-network
     depends_on:

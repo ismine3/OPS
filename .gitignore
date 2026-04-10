@@ -1,1 +1,9 @@
 .env
+
+# 敏感密钥文件
+*.pem
+*.key
+*.crt
+
+# 本地覆盖配置
+docker-compose.override.yml

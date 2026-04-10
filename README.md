@@ -341,7 +341,7 @@ OPS/
 DB_HOST: mysql
 DB_PORT: "3306"
 DB_USER: root
-DB_PASSWORD: Pass1234.          # 修改为强密码
+DB_PASSWORD: your-mysql-password  # 修改为强密码
 DB_NAME: ops_platform
 ```
 
@@ -374,7 +374,7 @@ WECHAT_WEBHOOK_URL: ""  # 填入企业微信群机器人Webhook地址
 
 #### Grafana集成
 ```yaml
-GRAFANA_URL: "https://grafana.huazsz.com"
+GRAFANA_URL: "https://your-grafana-url"
 GRAFANA_DASHBOARDS: '[
   {"name":"主机监控","uid":"StarsL-JOB-node"},
   {"name":"容器监控","uid":"pMEd7m0Mz"}

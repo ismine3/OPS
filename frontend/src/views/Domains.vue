@@ -441,8 +441,8 @@ async function handleNotify() {
   notifyLoading.value = true
   try {
     const res = await notifyDomains()
-    if (res.data?.notified > 0) {
-      ElMessage.success(`通知发送成功，已通知 ${res.data.notified} 个即将到期域名`)
+    if (res.data?.total > 0) {
+      ElMessage.success(`通知发送成功，已通知 ${res.data.total} 个临期域名（${res.data.expired} 已过期，${res.data.warning} 即将过期）`)
     } else {
       ElMessage.info('没有需要预警的域名')
     }

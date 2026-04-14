@@ -363,6 +363,9 @@ def sync_aliyun_domains():
     
     account_id = data.get('account_id')
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     db = get_db()
     cursor = db.cursor()
     try:
@@ -405,9 +408,6 @@ def sync_aliyun_domains():
         all_domains = []
         page_num = 1
         page_size = 100
-        
-        import logging
-        logger = logging.getLogger(__name__)
         
         try:
             while True:

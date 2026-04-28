@@ -1,9 +1,54 @@
+# ===== 环境变量 =====
 .env
+.env.*
+!.env.example
 
-# 敏感密钥文件
+# ===== 敏感密钥与证书 =====
 *.pem
 *.key
 *.crt
+*.cer
+*.pfx
+*.p12
+ssl/*
+!ssl/.gitkeep
 
-# 本地覆盖配置
+# ===== 本地覆盖配置 =====
 docker-compose.override.yml
+docker-compose.*.local.yml
+config.local.*
+secrets.yml
+secrets.yaml
+secrets.json
+credentials.json
+service-account*.json
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# ===== 日志与临时文件 =====
+*.log
+logs/
+*.bak
+*.swp
+*.tmp
+*~
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.iml
+
+# ===== 上传文件 =====
+backend/app/uploads/scripts/*
+!backend/app/uploads/scripts/.gitkeep
+
+# ===== Qoder 本地缓存 =====
+.qoder/review_diff.txt
+.qoder/repowiki/

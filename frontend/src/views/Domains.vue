@@ -422,12 +422,24 @@ async function handleSyncSubmit() {
     const succeeded = results.filter(r => r.status === 'fulfilled')
     const failed = results.filter(r => r.status === 'rejected')
 
+    // 汇总同步结果
+    let totalAdded = 0, totalUpdated = 0, totalSkipped = 0
+    succeeded.forEach(r => {
+      const d = (r as PromiseFulfilledResult<any>).value?.data
+      if (d) {
+        totalAdded += d.added || 0
+        totalUpdated += d.updated || 0
+        totalSkipped += d.skipped || 0
+      }
+    })
+    const detail = `(新增 ${totalAdded}，更新 ${totalUpdated}，跳过 ${totalSkipped})`
+
     if (failed.length === 0) {
-      ElMessage.success(`同步成功，共同步 ${succeeded.length} 个账户`)
+      ElMessage.success(`同步成功 ${detail}`)
     } else if (succeeded.length === 0) {
       ElMessage.error('所有账户同步失败')
     } else {
-      ElMessage.warning(`${succeeded.length} 个账户同步成功，${failed.length} 个失败`)
+      ElMessage.warning(`${succeeded.length} 个账户同步成功 ${detail}，${failed.length} 个失败`)
     }
 
     syncDialogVisible.value = false

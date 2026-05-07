@@ -550,33 +550,56 @@ def sync_aliyun_domains():
                 'message': f'查询阿里云域名列表失败: {str(e)}'
             }), 500
         
-        # 将域名插入数据库（INSERT IGNORE 避免重复）
+        # 将域名插入或更新数据库
         added_count = 0
+        updated_count = 0
         skipped_count = 0
         
         for domain_info in all_domains:
             cursor.execute("SELECT id FROM domains WHERE domain_name = %s", (domain_info['domain_name'],))
-            if cursor.fetchone():
-                skipped_count += 1
-                continue
+            existing = cursor.fetchone()
             
-            cursor.execute("""
-                INSERT INTO domains (
-                    domain_name, registrar, registration_date, expire_date, owner,
-                    dns_servers, status, source, aliyun_account_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                domain_info['domain_name'],
-                domain_info['registrar'],
-                domain_info['registration_date'],
-                domain_info['expire_date'],
-                domain_info['owner'],
-                domain_info['dns_servers'],
-                domain_info['status'],
-                'aliyun',
-                account_id
-            ))
-            added_count += 1
+            if existing:
+                # 已存在：更新到期日期、注册日期、状态等关键字段
+                cursor.execute("""
+                    UPDATE domains SET
+                        registrar = %s,
+                        registration_date = %s,
+                        expire_date = %s,
+                        owner = %s,
+                        dns_servers = %s,
+                        status = %s,
+                        aliyun_account_id = %s
+                    WHERE id = %s
+                """, (
+                    domain_info['registrar'],
+                    domain_info['registration_date'],
+                    domain_info['expire_date'],
+                    domain_info['owner'],
+                    domain_info['dns_servers'],
+                    domain_info['status'],
+                    account_id,
+                    existing['id']
+                ))
+                updated_count += 1
+            else:
+                cursor.execute("""
+                    INSERT INTO domains (
+                        domain_name, registrar, registration_date, expire_date, owner,
+                        dns_servers, status, source, aliyun_account_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    domain_info['domain_name'],
+                    domain_info['registrar'],
+                    domain_info['registration_date'],
+                    domain_info['expire_date'],
+                    domain_info['owner'],
+                    domain_info['dns_servers'],
+                    domain_info['status'],
+                    'aliyun',
+                    account_id
+                ))
+                added_count += 1
         
         db.commit()
         
@@ -586,6 +609,7 @@ def sync_aliyun_domains():
             'data': {
                 'total': len(all_domains),
                 'added': added_count,
+                'updated': updated_count,
                 'skipped': skipped_count
             }
         }), 200

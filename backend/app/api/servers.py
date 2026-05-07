@@ -360,6 +360,25 @@ def create_server():
         )
         db.commit()
         server_id = cursor.lastrowid
+        
+        # 处理项目关联
+        project_ids = data.get('project_ids', [])
+        if project_ids:
+            # 验证项目ID存在
+            placeholders = ','.join(['%s'] * len(project_ids))
+            cursor.execute(
+                f"SELECT id FROM projects WHERE id IN ({placeholders})",
+                tuple(project_ids)
+            )
+            existing_ids = {row['id'] for row in cursor.fetchall()}
+            for pid in project_ids:
+                if pid in existing_ids:
+                    cursor.execute(
+                        "INSERT INTO project_servers (project_id, server_id) VALUES (%s, %s)",
+                        (pid, server_id)
+                    )
+            db.commit()
+        
         # 记录操作日志
         log_operation(module='服务器管理', action='create', target_id=server_id, 
                      target_name=data.get('hostname'), detail={'env_type': data.get('env_type'), 'inner_ip': data.get('inner_ip')})

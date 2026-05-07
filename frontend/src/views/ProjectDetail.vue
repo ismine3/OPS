@@ -24,7 +24,7 @@
         </div>
       </template>
       <el-descriptions :column="2" border v-if="project">
-        <el-descriptions-item label="项目名称">{{ project.name }}</el-descriptions-item>
+        <el-descriptions-item label="项目名称">{{ project.project_name }}</el-descriptions-item>
         <el-descriptions-item label="负责人">{{ project.owner || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusTagType(project.status)">{{ project.status }}</el-tag>
@@ -169,7 +169,7 @@ import PasswordDisplay from '../components/PasswordDisplay.vue'
 
 interface Project {
   id: number
-  name: string
+  project_name: string
   owner: string
   status: string
   created_at: string

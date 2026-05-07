@@ -493,13 +493,9 @@ function getRemainingDaysTagType(expireDate: any) {
 }
 
 // 根据状态获取标签类型
-/**
- * @param {any} status
- */
-function getStatusTagType(status: any) {
+function getStatusTagType(status: string) {
   // 支持数字和中文两种格式
-  /** @type {Record<string, string>} */
-  const statusMap = {
+  const statusMap: Record<string, string> = {
     '正常': 'success',
     '即将过期': 'warning',
     '已过期': 'danger',
@@ -514,12 +510,8 @@ function getStatusTagType(status: any) {
 }
 
 // 状态显示文本转换
-/**
- * @param {any} status
- */
-function getStatusText(status: any) {
-  /** @type {Record<string, string>} */
-  const textMap = {
+function getStatusText(status: string) {
+  const textMap: Record<string, string> = {
     '正常': '正常',
     '即将过期': '即将过期',
     '已过期': '已过期',

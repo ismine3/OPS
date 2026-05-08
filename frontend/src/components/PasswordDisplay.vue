@@ -50,6 +50,7 @@ function copyPassword() {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
 }
 
 .password-text {
@@ -60,6 +61,10 @@ function copyPassword() {
   background: #f5f7fa;
   border-radius: 4px;
   min-width: 60px;
+  max-width: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   display: inline-block;
 }
@@ -72,6 +77,7 @@ function copyPassword() {
   cursor: pointer;
   color: #909399;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .copy-icon:hover {

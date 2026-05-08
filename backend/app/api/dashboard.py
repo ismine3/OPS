@@ -4,7 +4,7 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required
+from ..utils.decorators import jwt_required, role_required
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
@@ -21,9 +21,10 @@ def serialize_datetime(record):
 
 @dashboard_bp.route('/stats', methods=['GET'])
 @jwt_required
+@role_required(['admin'])
 def get_stats():
     """
-    获取仪表盘统计数据
+    获取仪表盘统计数据（仅管理员）
     """
     db = get_db()
     cursor = db.cursor()

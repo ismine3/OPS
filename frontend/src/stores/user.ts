@@ -27,6 +27,7 @@ export const useUserStore = defineStore('user', () => {
   const isAdmin = computed(() => userInfo.value.role === 'admin')
   const displayName = computed(() => userInfo.value.display_name || userInfo.value.username || '')
   const authorizedModules = computed(() => userInfo.value.modules || [])
+  const allowedEnvs = computed(() => userInfo.value.allowed_envs ?? null)
 
   function hasModuleAccess(moduleCode: string): boolean {
     if (userInfo.value.role === 'admin') return true
@@ -59,5 +60,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('userInfo')
   }
 
-  return { token, userInfo, isLoggedIn, isAdmin, displayName, authorizedModules, hasModuleAccess, setToken, setUserInfo, fetchProfile, logout }
+  return { token, userInfo, isLoggedIn, isAdmin, displayName, authorizedModules, allowedEnvs, hasModuleAccess, setToken, setUserInfo, fetchProfile, logout }
 })

@@ -34,3 +34,13 @@ export function getRoleModulesByRole(role: string) {
 export function updateRoleModules(role: string, modules: string[]) {
   return request.put(`/role-modules/${role}`, { modules })
 }
+
+// 获取用户环境权限
+export function getUserEnvPermissions(userId: number | string) {
+  return request.get(`/users/${userId}/env-permissions`)
+}
+
+// 更新用户环境权限
+export function updateUserEnvPermissions(userId: number | string, envTypes: string[]) {
+  return request.put(`/users/${userId}/env-permissions`, { env_types: envTypes })
+}

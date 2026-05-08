@@ -12,9 +12,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
-    redirect: '/dashboard',
     children: [
-      { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
+      { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘', requiresAdmin: true } },
       { path: 'monitoring', name: 'Monitoring', component: () => import('../views/Monitoring.vue'), meta: { title: '监控中心', moduleCode: 'monitoring' } },
       { path: 'projects', name: 'Projects', component: () => import('../views/Projects.vue'), meta: { title: '项目管理', requiresAuth: true, moduleCode: 'projects' } },
       { path: 'projects/:id', name: 'ProjectDetail', component: () => import('../views/ProjectDetail.vue'), meta: { title: '项目详情', requiresAuth: true, moduleCode: 'projects' } },
@@ -28,7 +27,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'tasks', name: 'Tasks', component: () => import('../views/Tasks.vue'), meta: { title: '定时任务', moduleCode: 'tasks' } },
       { path: 'users', name: 'Users', component: () => import('../views/Users.vue'), meta: { title: '用户管理', requiresAdmin: true } },
       { path: 'change-password', name: 'ChangePassword', component: () => import('../views/ChangePassword.vue'), meta: { title: '修改密码' } },
-      { path: 'operation-logs', name: 'OperationLogs', component: () => import('../views/OperationLogs.vue'), meta: { title: '操作日志' } },
+      { path: 'operation-logs', name: 'OperationLogs', component: () => import('../views/OperationLogs.vue'), meta: { title: '操作日志', requiresAdmin: true } },
     ]
   }
 ]
@@ -42,9 +41,26 @@ router.beforeEach(async (to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth === false) {
     if (token && to.path === '/login') {
-      next('/dashboard')
+      next('/')
     } else {
       next()
+    }
+  } else if (to.path === '/') {
+    // 根路径根据角色分发
+    if (!token) {
+      next('/login')
+      return
+    }
+    const userStore = useUserStore()
+    try {
+      await userStore.fetchProfile()
+    } catch {
+      /* 401 由 axios 拦截器处理 */
+    }
+    if (userStore.isAdmin) {
+      next('/dashboard')
+    } else {
+      next('/servers')
     }
   } else if (!token) {
     next('/login')
@@ -58,14 +74,13 @@ router.beforeEach(async (to, from, next) => {
     if (userStore.isAdmin) {
       next()
     } else {
-      next('/dashboard')
+      next('/')
     }
   } else {
     // 检查模块权限
     const moduleCode = to.meta.moduleCode as string | undefined
     if (moduleCode) {
       const userStore = useUserStore()
-      // 确保用户信息已加载（包括 modules）
       if (!userStore.userInfo.id || !Array.isArray(userStore.userInfo.modules)) {
         try {
           await userStore.fetchProfile()
@@ -74,7 +89,7 @@ router.beforeEach(async (to, from, next) => {
         }
       }
       if (!userStore.hasModuleAccess(moduleCode)) {
-        next('/dashboard')
+        next('/')
         return
       }
     }

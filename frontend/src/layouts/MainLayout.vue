@@ -15,7 +15,7 @@
         active-text-color="#409EFF"
         router
       >
-        <el-menu-item index="/dashboard">
+        <el-menu-item v-if="userStore.isAdmin" index="/dashboard">
           <el-icon><Odometer /></el-icon>
           <template #title>仪表盘</template>
         </el-menu-item>
@@ -59,7 +59,7 @@
           <el-icon><UserFilled /></el-icon>
           <template #title>用户与角色管理</template>
         </el-menu-item>
-        <el-menu-item index="/operation-logs">
+        <el-menu-item v-if="userStore.isAdmin" index="/operation-logs">
           <el-icon><List /></el-icon>
           <template #title>操作日志</template>
         </el-menu-item>
@@ -80,7 +80,7 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-button type="primary" plain size="small" @click="handleExport" :icon="Download">
+          <el-button v-if="userStore.isAdmin" type="primary" plain size="small" @click="handleExport" :icon="Download">
             导出Excel
           </el-button>
           <el-dropdown @command="handleCommand">

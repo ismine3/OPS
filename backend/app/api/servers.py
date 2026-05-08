@@ -1,12 +1,13 @@
 """
 服务器管理 API
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.validators import validate_ip, validate_hostname, validate_string_length
 from ..utils.password_utils import encrypt_data, decrypt_data
+from .users import get_user_allowed_envs
 
 servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
 
@@ -58,6 +59,15 @@ def get_servers():
         if search:
             where_clause += " AND (s.hostname LIKE %s OR s.inner_ip LIKE %s OR s.platform LIKE %s)"
             params.extend([f'%{search}%'] * 3)
+
+        # 用户环境权限过滤（admin 不过滤）
+        allowed_envs = get_user_allowed_envs(g.current_user['user_id'], g.current_user['role'])
+        if allowed_envs is not None:
+            if not allowed_envs:
+                return jsonify({'code': 200, 'data': {'items': [], 'total': 0, 'page': page, 'page_size': page_size}}), 200
+            placeholders = ','.join(['%s'] * len(allowed_envs))
+            where_clause += f" AND s.env_type IN ({placeholders})"
+            params.extend(allowed_envs)
 
         # 查询总数（如果有项目筛选需要用子查询去重）
         if project_filter:
@@ -124,7 +134,18 @@ def get_server_options():
     db = get_db()
     cursor = db.cursor()
     try:
-        cursor.execute("SELECT id, hostname AS name, inner_ip FROM servers ORDER BY env_type, hostname")
+        # 用户环境权限过滤
+        allowed_envs = get_user_allowed_envs(g.current_user['user_id'], g.current_user['role'])
+        if allowed_envs is not None:
+            if not allowed_envs:
+                return jsonify({'code': 200, 'data': []}), 200
+            placeholders = ','.join(['%s'] * len(allowed_envs))
+            cursor.execute(
+                f"SELECT id, hostname AS name, inner_ip FROM servers WHERE env_type IN ({placeholders}) ORDER BY env_type, hostname",
+                allowed_envs
+            )
+        else:
+            cursor.execute("SELECT id, hostname AS name, inner_ip FROM servers ORDER BY env_type, hostname")
         servers = cursor.fetchall()
         return jsonify({
             'code': 200,

@@ -9,6 +9,7 @@ from ..utils.auth import generate_token
 from ..utils.decorators import jwt_required
 from ..utils.operation_log import log_operation
 from ..models.role_module import get_modules_by_role, get_available_modules
+from .users import get_user_allowed_envs
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -87,6 +88,9 @@ def login():
     else:
         modules = get_modules_by_role(user['role'])
 
+    # 获取环境权限
+    allowed_envs = get_user_allowed_envs(user['id'], user['role'])
+
     return jsonify({
         'code': 200,
         'message': '登录成功',
@@ -96,7 +100,8 @@ def login():
                 'id': user['id'],
                 'username': user['username'],
                 'display_name': user['display_name'],
-                'role': user['role']
+                'role': user['role'],
+                'allowed_envs': allowed_envs
             },
             'modules': modules
         }
@@ -127,6 +132,9 @@ def get_profile():
     else:
         modules = get_modules_by_role(user['role'])
 
+    # 获取环境权限
+    allowed_envs = get_user_allowed_envs(user['id'], user['role'])
+
     return jsonify({
         'code': 200,
         'data': {
@@ -136,7 +144,8 @@ def get_profile():
             'role': user['role'],
             'is_active': user['is_active'],
             'created_at': user['created_at'].isoformat() if user['created_at'] else None,
-            'modules': modules
+            'modules': modules,
+            'allowed_envs': allowed_envs
         }
     }), 200
 

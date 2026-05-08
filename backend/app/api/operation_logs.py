@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required
+from ..utils.decorators import jwt_required, role_required
 import datetime
 
 logs_bp = Blueprint('operation_logs', __name__, url_prefix='/api/operation-logs')
@@ -19,6 +19,7 @@ def _safe_positive_int(value, default, minimum=1, maximum=500):
 
 @logs_bp.route('', methods=['GET'])
 @jwt_required
+@role_required(['admin'])
 def get_logs():
     """
     获取操作日志列表（分页）
@@ -101,6 +102,7 @@ def get_logs():
 
 @logs_bp.route('/modules', methods=['GET'])
 @jwt_required
+@role_required(['admin'])
 def get_modules():
     """获取所有操作模块列表"""
     db = get_db()
@@ -119,6 +121,7 @@ def get_modules():
 
 @logs_bp.route('/actions', methods=['GET'])
 @jwt_required
+@role_required(['admin'])
 def get_actions():
     """获取所有操作类型列表"""
     db = get_db()

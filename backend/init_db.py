@@ -118,6 +118,8 @@ def init_database():
         `version` VARCHAR(100) COMMENT '版本',
         `inner_port` VARCHAR(200) COMMENT '内网端口',
         `mapped_port` VARCHAR(200) COMMENT '外网映射端口',
+        `account` VARCHAR(255) COMMENT '服务账户',
+        `password` VARCHAR(255) COMMENT '服务密码',
         `remark` TEXT COMMENT '备注',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -392,6 +394,19 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSL证书管理表';
     """)
 
+    # 15. 用户环境权限表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `user_env_permissions` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `user_id` INT NOT NULL COMMENT '用户ID',
+        `env_type` VARCHAR(50) NOT NULL COMMENT '环境类型',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uk_user_env` (`user_id`, `env_type`),
+        INDEX `idx_user_id` (`user_id`),
+        FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户环境权限表';
+    """)
+
     # 为现有表添加 project_id 字段（如果不存在）
     def add_column_if_not_exists(table_name, column_name, column_def):
         """检查列是否存在，不存在则添加"""
@@ -408,6 +423,9 @@ def init_database():
 
     # 为 services 表添加 project_id 字段
     add_column_if_not_exists('services', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
+    # 为 services 表添加 account / password 字段
+    add_column_if_not_exists('services', 'account', '`account` VARCHAR(255) DEFAULT NULL COMMENT "服务账户"')
+    add_column_if_not_exists('services', 'password', '`password` VARCHAR(255) DEFAULT NULL COMMENT "服务密码"')
 
     # 为 domains 表添加 project_id 字段
     add_column_if_not_exists('domains', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')

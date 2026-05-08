@@ -5,6 +5,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..utils.password_utils import hash_password
 from ..utils.validators import validate_username
+from ..utils.db import get_db
 
 from ..models.user import (
     create_user, get_all_users, get_user_by_id, 
@@ -285,5 +286,70 @@ def reset_user_password(user_id):
     except Exception as e:
         return jsonify({
             'code': 500,
-            'message': f'密码重置失败: {str(e)}'
         }), 500
+
+
+@users_bp.route('/<int:user_id>/env-permissions', methods=['GET'])
+@jwt_required
+@role_required(['admin'])
+def get_user_env_permissions(user_id):
+    """获取用户环境权限"""
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute(
+            "SELECT env_type FROM user_env_permissions WHERE user_id = %s ORDER BY env_type",
+            (user_id,)
+        )
+        envs = [row['env_type'] for row in cursor.fetchall()]
+        return jsonify({'code': 200, 'data': envs}), 200
+    finally:
+        cursor.close()
+
+
+@users_bp.route('/<int:user_id>/env-permissions', methods=['PUT'])
+@jwt_required
+@role_required(['admin'])
+def update_user_env_permissions(user_id):
+    """更新用户环境权限
+    请求体: {"env_types": ["测试", "生产"]}
+    """
+    data = request.get_json()
+    if not data or 'env_types' not in data:
+        return jsonify({'code': 400, 'message': 'env_types 不能为空'}), 400
+    
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        # 先删后插
+        cursor.execute("DELETE FROM user_env_permissions WHERE user_id = %s", (user_id,))
+        for env in data['env_types']:
+            cursor.execute(
+                "INSERT IGNORE INTO user_env_permissions (user_id, env_type) VALUES (%s, %s)",
+                (user_id, env)
+            )
+        db.commit()
+        
+        log_operation('用户管理', 'update', user_id, '', {'action': 'env_permissions', 'env_types': data['env_types']})
+        return jsonify({'code': 200, 'message': '环境权限更新成功'}), 200
+    except Exception as e:
+        db.rollback()
+        return jsonify({'code': 500, 'message': f'更新失败: {str(e)}'}), 500
+    finally:
+        cursor.close()
+
+
+def get_user_allowed_envs(user_id, role):
+    """获取用户允许查看的环境类型列表。admin 返回 None 表示不限制；非常见环境返回 [] 表示无权限。"""
+    if role == 'admin':
+        return None
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute(
+            "SELECT env_type FROM user_env_permissions WHERE user_id = %s",
+            (user_id,)
+        )
+        return [row['env_type'] for row in cursor.fetchall()]
+    finally:
+        cursor.close()

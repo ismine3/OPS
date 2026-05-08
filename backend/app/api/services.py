@@ -1,10 +1,12 @@
 """
 服务管理 API
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
+from ..utils.password_utils import encrypt_data, decrypt_data
+from .users import get_user_allowed_envs
 
 services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 
@@ -45,8 +47,8 @@ def get_services():
         where_clause = "WHERE 1=1"
         params = []
         if search:
-            where_clause += " AND (s.service_name LIKE %s OR s.version LIKE %s)"
-            params.extend([f'%{search}%'] * 2)
+            where_clause += " AND (s.service_name LIKE %s OR s.version LIKE %s OR sv.inner_ip LIKE %s)"
+            params.extend([f'%{search}%'] * 3)
         if category:
             where_clause += " AND s.category = %s"
             params.append(category)
@@ -56,6 +58,15 @@ def get_services():
         if project_id:
             where_clause += " AND s.project_id = %s"
             params.append(project_id)
+        
+        # 用户环境权限过滤（admin 不过滤）
+        allowed_envs = get_user_allowed_envs(g.current_user['user_id'], g.current_user['role'])
+        if allowed_envs is not None:
+            if not allowed_envs:
+                return jsonify({'code': 200, 'data': {'items': [], 'total': 0, 'page': page, 'page_size': page_size}}), 200
+            placeholders = ','.join(['%s'] * len(allowed_envs))
+            where_clause += f" AND sv.env_type IN ({placeholders})"
+            params.extend(allowed_envs)
         
         # 查询总数
         count_sql = f"""SELECT COUNT(*) as total FROM services s
@@ -76,6 +87,14 @@ def get_services():
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         services = cursor.fetchall()
+
+        # 解密密码字段
+        for service in services:
+            if service.get('password'):
+                try:
+                    service['password'] = decrypt_data(service['password'])
+                except:
+                    pass  # 解密失败保持原值
 
         return jsonify({
             'code': 200,
@@ -101,11 +120,16 @@ def create_service():
     cursor = db.cursor()
     try:
         data = request.json
+        
+        # 加密密码字段
+        password_encrypted = encrypt_data(data['password']) if data.get('password') else None
+        
         cursor.execute(
-            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, remark, project_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, account, password, remark, project_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('server_id'), data.get('category'), data.get('service_name'),
              data.get('version'), data.get('inner_port'), data.get('mapped_port'),
+             data.get('account'), password_encrypted,
              data.get('remark'), data.get('project_id'))
         )
         db.commit()
@@ -146,9 +170,14 @@ def update_service(service_id):
         service_name = old_service['service_name'] if old_service else None
         
         data = request.json
+        
+        # 处理密码字段加密
+        if 'password' in data and data['password']:
+            data['password'] = encrypt_data(data['password'])
+        
         fields = []
         values = []
-        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'remark', 'project_id']:
+        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'account', 'password', 'remark', 'project_id']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])

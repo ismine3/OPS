@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from ..utils.db import get_db
-from ..utils.decorators import jwt_required
+from ..utils.decorators import jwt_required, role_required
 from ..utils.operation_log import log_operation
 
 export_bp = Blueprint("export", __name__, url_prefix="/api/export")
@@ -63,6 +63,7 @@ def safe_value(value):
 
 @export_bp.route("/excel", methods=["GET"])
 @jwt_required
+@role_required(['admin'])
 def export_excel():
     wb = Workbook()
     wb.remove(wb.active)

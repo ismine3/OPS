@@ -108,6 +108,39 @@
         </el-dialog>
       </el-tab-pane>
 
+      <!-- 环境授权 Tab -->
+      <el-tab-pane label="环境授权" name="envs">
+        <el-card class="search-card">
+          <el-form inline>
+            <el-form-item label="选择用户">
+              <el-select v-model="envUserId" placeholder="请选择用户" filterable style="width: 260px" @change="loadEnvPermissions">
+                <el-option v-for="u in tableData" :key="u.id" :label="`${u.display_name} (${u.username})`" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </el-card>
+        <el-card v-if="envUserId" class="env-card" v-loading="envLoading">
+          <template #header>
+            <div class="card-header">
+              <span>环境类型授权</span>
+              <span class="card-tip">勾选该用户可查看的环境类型；admin 不受限制</span>
+            </div>
+          </template>
+          <el-checkbox-group v-model="envPermissions" style="width: 100%">
+            <el-row :gutter="16">
+              <el-col :span="6" v-for="env in envTypes" :key="env">
+                <el-checkbox :value="env" style="margin-bottom: 12px">{{ env }}</el-checkbox>
+              </el-col>
+            </el-row>
+          </el-checkbox-group>
+          <div class="card-footer">
+            <el-checkbox v-model="envSelectAll" @change="handleEnvSelectAll" :indeterminate="envIndeterminate">全选</el-checkbox>
+            <el-button type="primary" @click="saveEnvPermissions" :loading="envSaving">保存</el-button>
+          </div>
+        </el-card>
+        <el-empty v-else description="请先在上方选择一个用户" />
+      </el-tab-pane>
+
       <!-- 角色授权 Tab -->
       <el-tab-pane label="角色授权" name="roles">
         <el-row :gutter="20" v-loading="roleLoading">
@@ -147,7 +180,8 @@
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, deleteUser, resetPassword, getRoleModules, updateRoleModules } from '../api/users'
+import { getUsers, createUser, updateUser, deleteUser, resetPassword, getRoleModules, updateRoleModules, getUserEnvPermissions, updateUserEnvPermissions } from '../api/users'
+import { getEnvTypes } from '../api/dicts'
 import { useUserStore } from '../stores/user'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, passwordStrength, isSafeSearch } from '@/utils/validators'
@@ -156,7 +190,53 @@ const userStore = useUserStore()
 const loading = ref(false)
 const submitLoading = ref(false)
 const resetLoading = ref(false)
-const tableData = ref([])
+const tableData = ref<any[]>([])
+
+// 环境授权相关
+const envUserId = ref<number | null>(null)
+const envLoading = ref(false)
+const envSaving = ref(false)
+const envPermissions = ref<string[]>([])
+const envTypes = ref<string[]>([])
+const envSelectAll = ref(false)
+const envIndeterminate = ref(false)
+
+// 监听环境权限变化，更新全选状态
+watch(envPermissions, (val) => {
+  const total = envTypes.value.length
+  envSelectAll.value = val.length === total && total > 0
+  envIndeterminate.value = val.length > 0 && val.length < total
+}, { deep: true })
+
+async function loadEnvPermissions() {
+  if (!envUserId.value) return
+  envLoading.value = true
+  try {
+    if (envTypes.value.length === 0) {
+      const res = await getEnvTypes()
+      envTypes.value = (res.data || []).map((e: any) => e.name)
+    }
+    const res = await getUserEnvPermissions(envUserId.value)
+    envPermissions.value = res.data || []
+  } finally {
+    envLoading.value = false
+  }
+}
+
+function handleEnvSelectAll(checked: boolean) {
+  envPermissions.value = checked ? [...envTypes.value] : []
+}
+
+async function saveEnvPermissions() {
+  if (!envUserId.value) return
+  envSaving.value = true
+  try {
+    await updateUserEnvPermissions(envUserId.value, envPermissions.value)
+    ElMessage.success('环境权限更新成功')
+  } finally {
+    envSaving.value = false
+  }
+}
 const dialogVisible = ref(false)
 const resetDialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
@@ -453,5 +533,15 @@ async function handleSaveRoleModules(roleKey: string) {
 
 .role-card :deep(.el-checkbox) {
   margin-bottom: 12px;
+}
+
+.env-card {
+  margin-bottom: 20px;
+}
+
+.card-tip {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 400;
 }
 </style>

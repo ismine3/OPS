@@ -21,7 +21,7 @@
         <el-form-item label="关键词">
           <el-input 
             v-model="searchParams.search" 
-            placeholder="服务名称"
+            placeholder="服务名称/IP"
             clearable 
             style="width: 220px"
             @keyup.enter="handleSearch"
@@ -53,6 +53,20 @@
         <el-table-column prop="version" label="版本" min-width="100" />
         <el-table-column prop="inner_port" label="内部端口" min-width="100" align="center" />
         <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
+        <el-table-column prop="account" label="账户" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.account" class="account-cell">
+              <span class="account-text">{{ row.account }}</span>
+              <el-icon class="copy-icon" @click="copyText(row.account)" title="复制"><CopyDocument /></el-icon>
+            </span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="密码" min-width="140">
+          <template #default="{ row }">
+            <PasswordDisplay :password="row.password" />
+          </template>
+        </el-table-column>
         <el-table-column prop="project_name" label="所属项目" min-width="120">
           <template #default="{ row }">
             <el-link v-if="row.project_id" type="primary" @click="$router.push(`/projects/${row.project_id}`)">
@@ -123,6 +137,18 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="账户" prop="account">
+              <el-input v-model="form.account" placeholder="如：root" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="密码" prop="password">
+              <el-input v-model="form.password" placeholder="请输入密码" show-password />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="所属项目" prop="project_id">
           <el-select v-model="form.project_id" placeholder="请选择项目" clearable style="width: 100%">
             <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
@@ -143,11 +169,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, CopyDocument } from '@element-plus/icons-vue'
 import { getServices, createService, updateService, deleteService } from '../api/services'
 import { getServerOptions } from '../api/servers'
 import { getEnvTypes, getServiceCategories } from '../api/dicts'
 import { getProjectOptions } from '../api/projects'
+import PasswordDisplay from '../components/PasswordDisplay.vue'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, portValidator, isSafeSearch } from '@/utils/validators'
 
@@ -183,6 +210,8 @@ const form = reactive({
   version: '',
   inner_port: '',
   mapped_port: '',
+  account: '',
+  password: '',
   project_id: null as number | null,
   remark: ''
 })
@@ -280,6 +309,8 @@ function resetForm() {
   form.version = ''
   form.inner_port = ''
   form.mapped_port = ''
+  form.account = ''
+  form.password = ''
   form.project_id = null
   form.remark = ''
 }
@@ -315,7 +346,9 @@ async function handleSubmit() {
       version: form.version,
       inner_port: form.inner_port,
       mapped_port: form.mapped_port,
-      project_id: form.project_id,
+      account: form.account,
+      password: form.password,
+      project_id: form.project_id ?? null,
       remark: form.remark
     }
     
@@ -369,6 +402,23 @@ function parsePorts(ports: string) {
   return ports.split(',').map(port => port.trim()).filter(port => port)
 }
 
+function copyText(text: string) {
+  if (!text) return
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('已复制')
+  }).catch(() => {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    ElMessage.success('已复制')
+  })
+}
+
 </script>
 
 <style scoped>
@@ -387,6 +437,31 @@ function parsePorts(ports: string) {
 .port-list {
   display: flex;
   flex-wrap: wrap;
+}
+
+.account-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.account-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.account-cell .copy-icon {
+  cursor: pointer;
+  color: #909399;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.account-cell .copy-icon:hover {
+  color: #409eff;
 }
 
 </style>

@@ -75,7 +75,7 @@ async function handleLogin() {
       modules: modules || []
     })
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push('/')
   } catch (e) {
     console.error('登录失败', e)
   } finally {

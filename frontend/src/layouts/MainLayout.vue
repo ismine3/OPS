@@ -55,6 +55,10 @@
           <el-icon><Key /></el-icon>
           <template #title>凭证管理</template>
         </el-menu-item>
+        <el-menu-item index="/deploy" v-if="userStore.hasModuleAccess('deploy')">
+          <el-icon><Upload /></el-icon>
+          <template #title>部署配置</template>
+        </el-menu-item>
         <el-menu-item v-if="userStore.isAdmin" index="/users">
           <el-icon><UserFilled /></el-icon>
           <template #title>用户与角色管理</template>
@@ -115,7 +119,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, UserFilled, Link, Key, List, Folder } from '@element-plus/icons-vue'
+import { Download, UserFilled, Link, Key, List, Folder, Upload } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { exportExcel } from '../api/export'
 

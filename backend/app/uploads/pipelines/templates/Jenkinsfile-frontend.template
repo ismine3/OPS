@@ -1,0 +1,293 @@
+// ==================== 全局函数定义====================
+
+// 企业微信通知函数 - Text格式（修复超时问题）
+def sendWeChatNotification(String messageContent, String webhookCredentialsId = null) {
+    script {
+        try {
+            def credentialsId = webhookCredentialsId ?: env.WECHAT_WEBHOOK_CREDENTIALS_ID
+
+            if (!credentialsId) {
+                echo "⚠️ 未配置企业微信机器人凭证ID，跳过通知"
+                return
+            }
+
+            if (!messageContent || messageContent.trim().isEmpty()) {
+                echo "⚠️ 消息内容为空，跳过通知"
+                return
+            }
+
+            echo "准备发送企业微信通知，消息内容长度: ${messageContent.length()}"
+
+            withCredentials([string(credentialsId: credentialsId, variable: 'WECHAT_WEBHOOK')]) {
+                if (!env.WECHAT_WEBHOOK) {
+                    echo "⚠️ 未配置Webhook URL，跳过通知"
+                    return
+                }
+
+                // 构建Text格式的消息（单行格式，避免curl命令解析问题）
+                def escapedContent = messageContent.replace('"', '\\"').replace('\n', '\\n')
+                echo "发送消息内容预览: ${messageContent.substring(0, Math.min(100, messageContent.length()))}..."
+
+                // 使用带超时的curl命令，防止无限等待
+                // 直接在shell脚本中构建完整命令，避免环境变量传递问题
+                def response = sh(script: "timeout 30 curl -s -X POST '$env.WECHAT_WEBHOOK' -H 'Content-Type: application/json' --connect-timeout 15 --max-time 30 -d '{\"msgtype\":\"text\",\"text\":{\"content\":\"$escapedContent\",\"mentioned_list\":[\"@all\"]}}'", returnStdout: true).trim()
+
+                echo "企业微信API响应: ${response}"
+
+                if (response.contains('"errcode":0')) {
+                    echo "✅ 企业微信通知发送成功"
+                } else {
+                    echo "⚠️ 企业微信通知发送失败: ${response}"
+                    // 不抛出异常，避免影响主流程
+                }
+            }
+        } catch (Exception e) {
+            echo "⚠️ 发送企业微信通知失败: ${e.message}"
+            echo "详细错误: ${e.toString()}"
+            // 不抛出异常，避免影响主流程
+        }
+    }
+}
+
+// 构建成功消息 - Text格式
+def buildSuccessMessage() {
+    def content = """🎉 {{NOTIFY_TITLE}}构建部署成功"""
+
+    echo "构建成功消息内容: ${content.length()} 字符"
+    return content
+}
+
+// 构建失败消息 - Text格式
+def buildFailureMessage() {
+    def content = """❌ {{NOTIFY_TITLE}}构建部署失败"""
+
+    echo "构建失败消息内容: ${content.length()} 字符"
+    return content
+}
+
+// 构建不稳定消息 - Text格式
+def buildUnstableMessage() {
+    def content = """⚠️ {{NOTIFY_TITLE}}构建不稳定"""
+
+    echo "构建不稳定消息内容: ${content.length()} 字符"
+    return content
+}
+
+def getFailedStage() {
+    try {
+        def log = currentBuild.rawBuild.getLog(100)
+        if (log.any { it.contains('npm run build') }) {
+            return "构建阶段"
+        } else if (log.any { it.contains('npm install') }) {
+            return "依赖安装阶段"
+        } else if (log.any { it.contains('sshPublisher') || it.contains('deploy') }) {
+            return "部署阶段"
+        } else if (log.any { it.contains('Error') || it.contains('FAILURE') }) {
+            return "执行阶段"
+        }
+    } catch (Exception e) {
+        // 忽略异常，返回默认值
+    }
+    return "未知阶段"
+}
+
+pipeline {
+    agent {
+        label 'master'
+    }
+    
+    environment {
+        GIT_REPO_URL = '{{GIT_REPO_URL}}'
+        GIT_CREDENTIALS_ID = '{{GIT_CREDENTIALS_ID}}'
+        GIT_BRANCH = '{{GIT_BRANCH}}'
+        // SSH远程服务器相关参数
+        SSH_CONFIG_NAME = '{{SSH_CONFIG_NAMES}}'
+        FRONTEND_DIR = '{{FRONTEND_DEPLOY_DIR}}'
+        // 企业微信机器人配置
+        WECHAT_WEBHOOK_CREDENTIALS_ID = '{{WECHAT_WEBHOOK_CREDENTIALS_ID}}'
+    }
+    
+    stages {
+        stage('拉取代码') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${GIT_BRANCH}"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[
+                        $class: 'CloneOption',
+                        depth: 0,           // 禁用浅克隆，0表示完整克隆
+                        noTags: false,      // 不拉取标签
+                        honorRefspec: true, // 使用远程引用规范
+                        timeout: 20
+                    ]],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [[
+                        url: GIT_REPO_URL,
+                        credentialsId: GIT_CREDENTIALS_ID
+                    ]]
+                ])
+                
+                script {
+                    env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_AUTHOR = sh(script: 'git log -1 --pretty=format:%an', returnStdout: true).trim()
+                    env.GIT_MESSAGE = sh(script: 'git log -1 --pretty=format:%s', returnStdout: true).trim()
+                    
+                    // 获取变更记录（使用try-catch避免首次构建时历史不足导致的错误）
+                    try {
+                        env.GIT_CHANGES = sh(script: 'git log --pretty=format:"- %s" ${GIT_PREVIOUS_COMMIT:-HEAD~10}..HEAD 2>/dev/null', returnStdout: true).trim()
+                    } catch (Exception e) {
+                        echo "获取完整变更记录失败，尝试获取最近提交: ${e.message}"
+                    }
+                    
+                    // 如果获取失败或为空，尝试其他方式
+                    if (!env.GIT_CHANGES) {
+                        try {
+                            // 首次构建或提交历史不足时，获取最近最多10条记录
+                            def commitCount = sh(script: 'git rev-list --count HEAD 2>/dev/null || echo 0', returnStdout: true).trim().toInteger()
+                            def count = Math.min(commitCount, 10)
+                            env.GIT_CHANGES = sh(script: "git log -${count} --pretty=format:\"- %s\" 2>/dev/null || echo \"- 首次构建\"", returnStdout: true).trim()
+                        } catch (Exception e2) {
+                            echo "获取提交记录失败: ${e2.message}"
+                            env.GIT_CHANGES = "- 首次构建或历史记录不足"
+                        }
+                    }
+                    
+                    echo "构建提交: ${env.GIT_COMMIT} by ${env.GIT_AUTHOR}"
+                    echo "变更记录: ${env.GIT_CHANGES}"
+                }
+            }
+        }
+        
+        stage('配置Node.js环境') {
+            steps {
+                sh '''
+                    # 设置NVM环境
+                    export NVM_DIR="$HOME/.nvm"
+                    if [ -s "$NVM_DIR/nvm.sh" ]; then
+                        # 加载NVM
+                        . "$NVM_DIR/nvm.sh"
+                        # 安装Node.js
+                        nvm install {{NODE_VERSION}}
+                        # 使用Node.js
+                        nvm use {{NODE_VERSION}}
+                        # 验证Node.js和npm版本
+                        node -v
+                        npm -v
+                    fi
+                '''
+            }
+        }
+        
+        stage('安装依赖') {
+            steps {
+                sh '''
+                    # 设置NVM环境
+                    export NVM_DIR="$HOME/.nvm"
+                    . "$NVM_DIR/nvm.sh"
+                    nvm use {{NODE_VERSION}} --silent
+                    # 安装依赖
+                    npm config set registry {{NPM_REGISTRY}}
+                    npm ci --verbose --no-audit --prefer-offline || npm install --verbose --no-audit --prefer-offline
+                    if ! npm list terser 2>/dev/null; then
+                        npm install terser --save-dev --verbose --no-audit
+                    fi
+                    echo "依赖安装完成"
+                '''
+            }
+        }
+        
+        stage('构建前端') {
+            steps {
+                sh '''
+                    # 设置NVM环境
+                    export NVM_DIR="$HOME/.nvm"
+                    . "$NVM_DIR/nvm.sh"
+                    nvm use {{NODE_VERSION}}
+                    
+                    # 构建前端
+                    {{BUILD_COMMAND}}
+                '''
+            }
+        }
+        
+        stage('远程部署') {
+            steps {
+                sshPublisher(
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: env.SSH_CONFIG_NAME,
+                            transfers: [
+                                sshTransfer(
+                                    sourceFiles: 'dist/**/*',
+                                    remoteDirectory: env.FRONTEND_DIR,
+                                    removePrefix: 'dist/',
+                                    execTimeout: 60000,
+                                    cleanRemote: true,
+                                    excludes: '',
+                                    flatten: false,
+                                    makeEmptyDirs: true,
+                                    noDefaultExcludes: false,
+                                    patternSeparator: '[\\, ]+',
+                                    remoteDirectorySDF: false,
+                                    execCommand: '' // 不需要执行命令
+                                )
+                            ],
+                            usePromotionTimestamp: false,
+                            useWorkspaceInPromotion: false,
+                            verbose: false
+                        )
+                    ]
+                )
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo "=== 构建执行总结 ==="
+            echo "状态: ${currentBuild.result ?: 'SUCCESS'}"
+            echo "分支: ${env.GIT_BRANCH}"
+            echo "持续时间: ${currentBuild.durationString}"
+            
+            // 清理工作空间
+            //cleanWs()
+        }
+
+        success {
+            echo '🎉 构建成功！'
+            script {
+                try {
+                    def message = buildSuccessMessage()
+                    sendWeChatNotification(message)
+                } catch (Exception e) {
+                    echo "⚠️ 构建成功通知发送失败: ${e.message}"
+                }
+            }
+        }
+
+        failure {
+            echo '❌ 构建失败！'
+            script {
+                try {
+                    def message = buildFailureMessage()
+                    sendWeChatNotification(message)
+                } catch (Exception e) {
+                    echo "⚠️ 构建失败通知发送失败: ${e.message}"
+                }
+            }
+        }
+
+        unstable {
+            echo '⚠️ 构建不稳定！'
+            script {
+                try {
+                    def message = buildUnstableMessage()
+                    sendWeChatNotification(message)
+                } catch (Exception e) {
+                    echo "⚠️ 构建不稳定通知发送失败: ${e.message}"
+                }
+            }
+        }
+    }
+}

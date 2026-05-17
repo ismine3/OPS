@@ -14,6 +14,7 @@ AVAILABLE_MODULES = [
     {'code': 'projects', 'name': '项目管理'},
     {'code': 'monitoring', 'name': '监控告警'},
     {'code': 'tasks', 'name': '定时任务'},
+    {'code': 'deploy', 'name': '部署配置'},
 ]
 
 

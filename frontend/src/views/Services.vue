@@ -67,11 +67,19 @@
             <PasswordDisplay :password="row.password" />
           </template>
         </el-table-column>
-        <el-table-column prop="project_name" label="所属项目" min-width="120">
+        <el-table-column label="所属项目" min-width="180">
           <template #default="{ row }">
-            <el-link v-if="row.project_id" type="primary" @click="$router.push(`/projects/${row.project_id}`)">
-              {{ row.project_name }}
-            </el-link>
+            <template v-if="row.project_names && row.project_names.length">
+              <el-tag
+                v-for="(name, idx) in row.project_names"
+                :key="idx"
+                size="small"
+                type="primary"
+                style="margin-right: 4px; margin-bottom: 2px;"
+                @click="$router.push(`/projects/${row.project_ids[idx]}`)"
+                class="clickable-tag"
+              >{{ name }}</el-tag>
+            </template>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -149,8 +157,8 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="所属项目" prop="project_id">
-          <el-select v-model="form.project_id" placeholder="请选择项目" clearable style="width: 100%">
+        <el-form-item label="所属项目" prop="project_ids">
+          <el-select v-model="form.project_ids" placeholder="请选择项目（可多选）" multiple clearable style="width: 100%">
             <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
@@ -194,6 +202,7 @@ const searchParams = reactive({
   env_type: '',
   category: '',
   project_id: null as number | null,
+  project_ids: [] as number[],
   search: ''
 })
 
@@ -212,7 +221,7 @@ const form = reactive({
   mapped_port: '',
   account: '',
   password: '',
-  project_id: null as number | null,
+  project_ids: [] as number[],
   remark: ''
 })
 
@@ -267,7 +276,11 @@ async function loadDicts() {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getServices({ ...searchParams, page: pagination.page, page_size: pagination.pageSize })
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, search: searchParams.search }
+    if (searchParams.env_type) params.env_type = searchParams.env_type
+    if (searchParams.category) params.category = searchParams.category
+    if (searchParams.project_id) params.project_id = searchParams.project_id
+    const res = await getServices(params)
     tableData.value = res.data.items || []
     pagination.total = res.data.total || 0
   } finally {
@@ -296,6 +309,7 @@ function handleSearch() {
 function handleReset() {
   searchParams.env_type = ''
   searchParams.category = ''
+  searchParams.project_ids = []
   searchParams.project_id = null
   searchParams.search = ''
   pagination.page = 1
@@ -311,7 +325,7 @@ function resetForm() {
   form.mapped_port = ''
   form.account = ''
   form.password = ''
-  form.project_id = null
+  form.project_ids = []
   form.remark = ''
 }
 
@@ -329,6 +343,7 @@ function handleEdit(row: any) {
   dialogTitle.value = '编辑服务'
   editingId.value = row.id
   Object.assign(form, row)
+  form.project_ids = row.project_ids || []
   dialogVisible.value = true
 }
 
@@ -348,7 +363,7 @@ async function handleSubmit() {
       mapped_port: form.mapped_port,
       account: form.account,
       password: form.password,
-      project_id: form.project_id ?? null,
+      project_ids: form.project_ids,
       remark: form.remark
     }
     
@@ -462,6 +477,14 @@ function copyText(text: string) {
 
 .account-cell .copy-icon:hover {
   color: #409eff;
+}
+
+.clickable-tag {
+  cursor: pointer;
+}
+
+.clickable-tag:hover {
+  opacity: 0.8;
 }
 
 </style>

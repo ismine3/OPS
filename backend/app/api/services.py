@@ -16,8 +16,7 @@ services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 @module_required('services')
 def get_services():
     """
-    获取服务列表
-    支持查询参数: category, search, env_type, project_id, page, page_size
+    获取服务列表（支持 project_id 多条过滤）
     """
     db = get_db()
     cursor = db.cursor()
@@ -29,21 +28,16 @@ def get_services():
         page = request.args.get('page', '1')
         page_size = request.args.get('page_size', '10')
 
-        # 分页参数处理
         try:
             page = int(page)
             page_size = int(page_size)
-            if page < 1:
-                page = 1
-            if page_size < 1:
-                page_size = 10
-            if page_size > 100:
-                page_size = 100
+            if page < 1: page = 1
+            if page_size < 1: page_size = 10
+            if page_size > 100: page_size = 100
         except ValueError:
             page = 1
             page_size = 10
 
-        # 构建基础查询条件
         where_clause = "WHERE 1=1"
         params = []
         if search:
@@ -56,10 +50,9 @@ def get_services():
             where_clause += " AND sv.env_type = %s"
             params.append(env_type)
         if project_id:
-            where_clause += " AND s.project_id = %s"
+            where_clause += " AND EXISTS (SELECT 1 FROM service_projects sp2 WHERE sp2.service_id = s.id AND sp2.project_id = %s)"
             params.append(project_id)
-        
-        # 用户环境权限过滤（admin 不过滤）
+
         allowed_envs = get_user_allowed_envs(g.current_user['user_id'], g.current_user['role'])
         if allowed_envs is not None:
             if not allowed_envs:
@@ -67,20 +60,16 @@ def get_services():
             placeholders = ','.join(['%s'] * len(allowed_envs))
             where_clause += f" AND sv.env_type IN ({placeholders})"
             params.extend(allowed_envs)
-        
-        # 查询总数
-        count_sql = f"""SELECT COUNT(*) as total FROM services s
+
+        count_sql = f"""SELECT COUNT(DISTINCT s.id) as total FROM services s
                         JOIN servers sv ON s.server_id = sv.id
                         {where_clause}"""
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
 
-        # 查询数据
-        sql = f"""SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.mapped_ip, sv.env_type,
-                         p.project_name
+        sql = f"""SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.mapped_ip, sv.env_type
                   FROM services s
                   JOIN servers sv ON s.server_id = sv.id
-                  LEFT JOIN projects p ON s.project_id = p.id
                   {where_clause}
                   ORDER BY sv.env_type, sv.inner_ip, s.category, s.service_name
                   LIMIT %s OFFSET %s"""
@@ -88,22 +77,38 @@ def get_services():
         cursor.execute(sql, params + [page_size, offset])
         services = cursor.fetchall()
 
-        # 解密密码字段
-        for service in services:
-            if service.get('password'):
+        # 批量查所有服务的项目关联
+        service_ids = [s['id'] for s in services]
+        project_map = {}
+        if service_ids:
+            placeholders = ','.join(['%s'] * len(service_ids))
+            cursor.execute(f"""
+                SELECT sp.service_id, p.id, p.project_name
+                FROM service_projects sp
+                JOIN projects p ON sp.project_id = p.id
+                WHERE sp.service_id IN ({placeholders})
+            """, service_ids)
+            for row in cursor.fetchall():
+                sid = row['service_id']
+                if sid not in project_map:
+                    project_map[sid] = []
+                project_map[sid].append({'id': row['id'], 'name': row['project_name']})
+
+        for s in services:
+            projects = project_map.get(s['id'], [])
+            s['project_ids'] = [p['id'] for p in projects]
+            s['project_names'] = [p['name'] for p in projects]
+            s['project_id'] = s['project_ids'][0] if s['project_ids'] else None
+            s['project_name'] = s['project_names'][0] if s['project_names'] else None
+            if s.get('password'):
                 try:
-                    service['password'] = decrypt_data(service['password'])
+                    s['password'] = decrypt_data(s['password'])
                 except:
-                    pass  # 解密失败保持原值
+                    pass
 
         return jsonify({
             'code': 200,
-            'data': {
-                'items': services,
-                'total': total,
-                'page': page,
-                'page_size': page_size
-            }
+            'data': {'items': services, 'total': total, 'page': page, 'page_size': page_size}
         })
     finally:
         cursor.close()
@@ -113,43 +118,36 @@ def get_services():
 @module_required('services')
 @role_required(['admin', 'operator'])
 def create_service():
-    """
-    创建服务
-    """
+    """创建服务（支持 project_ids 数组）"""
     db = get_db()
     cursor = db.cursor()
     try:
         data = request.json
-        
-        # 加密密码字段
         password_encrypted = encrypt_data(data['password']) if data.get('password') else None
-        
         cursor.execute(
-            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, account, password, remark, project_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, account, password, remark) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('server_id'), data.get('category'), data.get('service_name'),
              data.get('version'), data.get('inner_port'), data.get('mapped_port'),
              data.get('account'), password_encrypted,
-             data.get('remark'), data.get('project_id'))
+             data.get('remark'))
         )
-        db.commit()
         service_id = cursor.lastrowid
-        
-        # 记录操作日志
-        log_operation('服务管理', 'create', service_id, data.get('service_name'), 
+        # 插入项目关联
+        project_ids = data.get('project_ids') or []
+        if isinstance(project_ids, list) and project_ids:
+            for pid in project_ids:
+                cursor.execute(
+                    "INSERT IGNORE INTO service_projects (service_id, project_id) VALUES (%s, %s)",
+                    (service_id, pid)
+                )
+        db.commit()
+        log_operation('服务管理', 'create', service_id, data.get('service_name'),
                      {'category': data.get('category'), 'version': data.get('version')})
-        
-        return jsonify({
-            'code': 200,
-            'message': '创建成功',
-            'data': {'id': service_id}
-        })
+        return jsonify({'code': 200, 'message': '创建成功', 'data': {'id': service_id}})
     except Exception as e:
         db.rollback()
-        return jsonify({
-            'code': 500,
-            'message': f'创建失败: {str(e)}'
-        }), 500
+        return jsonify({'code': 500, 'message': f'创建失败: {str(e)}'}), 500
     finally:
         cursor.close()
 
@@ -158,47 +156,39 @@ def create_service():
 @module_required('services')
 @role_required(['admin', 'operator'])
 def update_service(service_id):
-    """
-    更新服务
-    """
+    """更新服务（支持 project_ids 数组）"""
     db = get_db()
     cursor = db.cursor()
     try:
-        # 获取更新前的服务名
         cursor.execute("SELECT service_name FROM services WHERE id = %s", (service_id,))
         old_service = cursor.fetchone()
         service_name = old_service['service_name'] if old_service else None
-        
         data = request.json
-        
-        # 处理密码字段加密
         if 'password' in data and data['password']:
             data['password'] = encrypt_data(data['password'])
-        
         fields = []
         values = []
-        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'account', 'password', 'remark', 'project_id']:
+        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'account', 'password', 'remark']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])
         if fields:
             values.append(service_id)
             cursor.execute(f"UPDATE services SET {', '.join(fields)} WHERE id = %s", values)
-            db.commit()
-            
-            # 记录操作日志
-            log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name)
-            
-        return jsonify({
-            'code': 200,
-            'message': '更新成功'
-        })
+        # 同步项目关联
+        if 'project_ids' in data:
+            cursor.execute("DELETE FROM service_projects WHERE service_id = %s", (service_id,))
+            for pid in (data['project_ids'] or []):
+                cursor.execute(
+                    "INSERT IGNORE INTO service_projects (service_id, project_id) VALUES (%s, %s)",
+                    (service_id, pid)
+                )
+        db.commit()
+        log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name)
+        return jsonify({'code': 200, 'message': '更新成功'})
     except Exception as e:
         db.rollback()
-        return jsonify({
-            'code': 500,
-            'message': f'更新失败: {str(e)}'
-        }), 500
+        return jsonify({'code': 500, 'message': f'更新失败: {str(e)}'}), 500
     finally:
         cursor.close()
 

@@ -129,6 +129,20 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务清单表';
     """)
 
+    # 5.1 服务-项目关联表（支持一对多）
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `service_projects` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `service_id` INT NOT NULL COMMENT '服务ID',
+        `project_id` INT NOT NULL COMMENT '项目ID',
+        UNIQUE KEY `uk_service_project` (`service_id`, `project_id`),
+        INDEX `idx_service_id` (`service_id`),
+        INDEX `idx_project_id` (`project_id`),
+        FOREIGN KEY (`service_id`) REFERENCES `services`(`id`) ON DELETE CASCADE,
+        FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务-项目关联表';
+    """)
+
     # 10. 环境类型字典表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `dict_env_types` (
@@ -616,8 +630,6 @@ def init_database():
         except Exception as e:
             print(f"为 {table_name} 表添加 {column_name} 字段时出错: {e}")
 
-    # 为 services 表添加 project_id 字段
-    add_column_if_not_exists('services', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
     # 为 services 表添加 account / password 字段
     add_column_if_not_exists('services', 'account', '`account` VARCHAR(255) DEFAULT NULL COMMENT "服务账户"')
     add_column_if_not_exists('services', 'password', '`password` VARCHAR(255) DEFAULT NULL COMMENT "服务密码"')

@@ -54,7 +54,7 @@ def get_servers():
             where_clause += " AND s.platform = %s"
             params.append(platform_filter)
         if project_filter:
-            where_clause += " AND ps.project_id = %s"
+            where_clause += " AND EXISTS (SELECT 1 FROM project_servers ps WHERE ps.server_id = s.id AND ps.project_id = %s)"
             params.append(project_filter)
         if search:
             where_clause += " AND (s.hostname LIKE %s OR s.inner_ip LIKE %s OR s.platform LIKE %s)"
@@ -69,36 +69,45 @@ def get_servers():
             where_clause += f" AND s.env_type IN ({placeholders})"
             params.extend(allowed_envs)
 
-        # 查询总数（如果有项目筛选需要用子查询去重）
-        if project_filter:
-            count_sql = f"""
-                SELECT COUNT(DISTINCT s.id) as total 
-                FROM servers s 
-                LEFT JOIN project_servers ps ON s.id = ps.server_id 
-                {where_clause}
-            """
-        else:
-            count_sql = f"SELECT COUNT(*) as total FROM servers s {where_clause}"
+        # 查询总数
+        count_sql = f"SELECT COUNT(*) as total FROM servers s {where_clause}"
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
 
-        # 查询数据（LEFT JOIN 获取所属项目）
+        # 查询数据（不加项目 JOIN，项目关联单独批量查）
         sql = f"""
-            SELECT s.*, 
-                   GROUP_CONCAT(DISTINCT p.project_name) as project_names,
-                   GROUP_CONCAT(DISTINCT p.id) as project_ids
+            SELECT s.*
             FROM servers s
-            LEFT JOIN project_servers ps ON s.id = ps.server_id
-            LEFT JOIN projects p ON ps.project_id = p.id
             {where_clause}
-            GROUP BY s.id
             ORDER BY s.env_type, s.id
             LIMIT %s OFFSET %s
         """
         offset = (page - 1) * page_size
         cursor.execute(sql, params + [page_size, offset])
         servers = cursor.fetchall()
-        
+
+        # 批量查询项目关联
+        server_ids = [s['id'] for s in servers]
+        project_map = {}
+        if server_ids:
+            placeholders = ','.join(['%s'] * len(server_ids))
+            cursor.execute(f"""
+                SELECT ps.server_id, p.id, p.project_name
+                FROM project_servers ps
+                JOIN projects p ON ps.project_id = p.id
+                WHERE ps.server_id IN ({placeholders})
+            """, server_ids)
+            for row in cursor.fetchall():
+                sid = row['server_id']
+                if sid not in project_map:
+                    project_map[sid] = []
+                project_map[sid].append({'id': row['id'], 'name': row['project_name']})
+
+        for s in servers:
+            projects = project_map.get(s['id'], [])
+            s['project_ids'] = [p['id'] for p in projects]
+            s['project_names'] = [p['name'] for p in projects]
+
         # 解密密码字段
         for server in servers:
             if server.get('os_password'):

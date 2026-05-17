@@ -127,10 +127,12 @@ def get_config():
             existing = next((f for f in field_map if f["config_key"] == row['config_key']), None)
             if not existing:
                 existing = {
+                    "config_id": row['id'],
                     "config_key": row['config_key'],
                     "config_label": row['config_label'],
                     "description": row['description'] or '',
                     "required": bool(row['required']),
+                    "pipeline_type": row['pipeline_type'] or '',
                     "options": [],
                 }
                 field_map.append(existing)

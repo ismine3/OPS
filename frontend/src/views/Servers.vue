@@ -46,7 +46,22 @@
           </template>
         </el-table-column>
         <el-table-column prop="platform" label="平台" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="project_names" label="所属项目" min-width="120" show-overflow-tooltip />
+        <el-table-column label="所属项目" min-width="180">
+          <template #default="{ row }">
+            <template v-if="row.project_names && row.project_names.length">
+              <el-tag
+                v-for="(name, idx) in row.project_names"
+                :key="idx"
+                size="small"
+                type="primary"
+                style="margin-right: 4px; margin-bottom: 2px;"
+                @click="$router.push(`/projects/${row.project_ids[idx]}`)"
+                class="clickable-tag"
+              >{{ name }}</el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="hostname" label="主机名" min-width="120" show-overflow-tooltip />
         <el-table-column prop="inner_ip" label="内网IP" min-width="120" />
         <el-table-column prop="mapped_ip" label="映射IP" min-width="120" />
@@ -407,12 +422,7 @@ function handleEdit(row: any) {
   dialogTitle.value = '编辑服务器'
   editingId.value = row.id
   Object.assign(form, row)
-  // 解析 project_ids 从逗号分隔的字符串转为数组
-  if (row.project_ids) {
-    form.project_ids = row.project_ids.split(',').map((id) => Number(id))
-  } else {
-    form.project_ids = []
-  }
+  form.project_ids = row.project_ids || []
   dialogVisible.value = true
 }
 
@@ -454,9 +464,8 @@ function handleDelete(row: any) {
 /**
  * @param {any} env
  */
-function getEnvTagType(env: any) {
-  /** @type {Record<string, string>} */
-  const map = {
+function getEnvTagType(env: string) {
+  const map: Record<string, string> = {
     '生产': 'danger',
     '测试': 'warning',
     '智慧环保': 'success',
@@ -477,5 +486,13 @@ function getEnvTagType(env: any) {
 
 .table-card {
   margin-bottom: 0;
+}
+
+.clickable-tag {
+  cursor: pointer;
+}
+
+.clickable-tag:hover {
+  opacity: 0.8;
 }
 </style>

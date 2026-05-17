@@ -7,10 +7,12 @@ export interface PipelineOption {
 }
 
 export interface PipelineField {
+  config_id: number
   config_key: string
   config_label: string
   description: string
   required: boolean
+  pipeline_type: string | null
   options: PipelineOption[]
 }
 

@@ -61,7 +61,7 @@ def get_projects():
             SELECT 
                 p.*,
                 (SELECT COUNT(*) FROM project_servers ps WHERE ps.project_id = p.id) as server_count,
-                (SELECT COUNT(*) FROM services s WHERE s.project_id = p.id) as service_count,
+                (SELECT COUNT(*) FROM service_projects sp WHERE sp.project_id = p.id) as service_count,
                 (SELECT COUNT(*) FROM domains d WHERE d.project_id = p.id) as domain_count,
                 (SELECT COUNT(*) FROM ssl_certificates c WHERE c.project_id = p.id) as cert_count,
                 (SELECT COUNT(*) FROM accounts a WHERE a.project_id = p.id) as account_count
@@ -210,8 +210,9 @@ def get_project_detail(project_id):
                    srv.hostname AS server_hostname,
                    s.version, s.inner_port, s.mapped_port
             FROM services s
+            INNER JOIN service_projects sp ON s.id = sp.service_id
             LEFT JOIN servers srv ON s.server_id = srv.id
-            WHERE s.project_id = %s
+            WHERE sp.project_id = %s
             ORDER BY s.service_name
             """,
             (project_id,)

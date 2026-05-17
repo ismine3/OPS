@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required
+from ..utils.password_utils import decrypt_data
 from ..utils.operation_log import log_operation
 
 export_bp = Blueprint("export", __name__, url_prefix="/api/export")
@@ -61,6 +62,16 @@ def safe_value(value):
     return str(value)
 
 
+def safe_decrypt(value):
+    """安全解密：空值/NULL 直接返回空字符串，解密失败返回原值"""
+    if not value:
+        return ""
+    try:
+        return decrypt_data(value)
+    except Exception:
+        return value
+
+
 @export_bp.route("/excel", methods=["GET"])
 @jwt_required
 @role_required(['admin'])
@@ -90,8 +101,8 @@ def export_excel():
             "用途",
             "系统用户",
             "系统密码",
-            "Docker用户",
-            "Docker密码",
+            "普通用户",
+            "普通用户密码",
             "备注",
         ]
 
@@ -120,9 +131,9 @@ def export_excel():
                 safe_value(server.get("data_disk")),
                 safe_value(server.get("purpose")),
                 safe_value(server.get("os_user")),
-                safe_value(server.get("os_password")),
+                safe_value(safe_decrypt(server.get("os_password", ""))),
                 safe_value(server.get("docker_user")),
-                safe_value(server.get("docker_password")),
+                safe_value(safe_decrypt(server.get("docker_password", ""))),
                 safe_value(server.get("remark")),
             ]
             data_rows1.append(row_data)
@@ -146,6 +157,8 @@ def export_excel():
             "映射端口",
             "外网IP",
             "内网IP",
+            "服务账户",
+            "服务密码",
             "备注",
         ]
 
@@ -179,6 +192,8 @@ def export_excel():
                 safe_value(service.get("mapped_port")),
                 safe_value(service.get("public_ip")),
                 safe_value(service.get("inner_ip")),
+                safe_value(safe_decrypt(service.get("account", ""))),
+                safe_value(safe_decrypt(service.get("password", ""))),
                 safe_value(service.get("remark")),
             ]
             data_rows2.append(row_data)
@@ -210,7 +225,7 @@ def export_excel():
                 safe_value(app_row.get("company")),
                 safe_value(app_row.get("access_url")),
                 safe_value(app_row.get("username")),
-                safe_value(app_row.get("password")),
+                safe_value(safe_decrypt(app_row.get("password", ""))),
                 safe_value(app_row.get("remark")),
             ]
             data_rows3.append(row_data)

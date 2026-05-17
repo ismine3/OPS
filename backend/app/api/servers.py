@@ -230,7 +230,18 @@ def get_servers_list():
     db = get_db()
     cursor = db.cursor()
     try:
-        cursor.execute("SELECT id, env_type, hostname, inner_ip FROM servers ORDER BY env_type, inner_ip")
+        # 用户环境权限过滤
+        allowed_envs = get_user_allowed_envs(g.current_user['user_id'], g.current_user['role'])
+        if allowed_envs is not None:
+            if not allowed_envs:
+                return jsonify({'code': 200, 'data': []}), 200
+            placeholders = ','.join(['%s'] * len(allowed_envs))
+            cursor.execute(
+                f"SELECT id, env_type, hostname, inner_ip FROM servers WHERE env_type IN ({placeholders}) ORDER BY env_type, inner_ip",
+                allowed_envs
+            )
+        else:
+            cursor.execute("SELECT id, env_type, hostname, inner_ip FROM servers ORDER BY env_type, inner_ip")
         servers = cursor.fetchall()
         return jsonify({
             'code': 200,
@@ -593,7 +604,8 @@ def update_server(server_id):
         cursor.execute("SELECT hostname FROM servers WHERE id = %s", (server_id,))
         server = cursor.fetchone()
         log_operation(module='服务器管理', action='update', target_id=server_id, 
-                     target_name=server['hostname'] if server else str(server_id))
+                     target_name=server['hostname'] if server else str(server_id),
+                     detail={'updated_fields': list(data.keys())})
         return jsonify({
             'code': 200,
             'message': '更新成功'

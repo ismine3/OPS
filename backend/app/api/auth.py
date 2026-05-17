@@ -207,6 +207,8 @@ def change_password():
     success = update_password(user_id, new_password_hash)
     
     if success:
+        log_operation(module='用户认证', action='change_password', target_id=user_id,
+                     target_name=user['username'], user_id=user_id, username=user['username'])
         return jsonify({
             'code': 200,
             'message': '密码修改成功'

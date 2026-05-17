@@ -175,6 +175,7 @@ def create_task():
     db = get_db()
     cursor = db.cursor()
     
+    task_id = None
     try:
         # 先创建任务记录获取 task_id
         cursor.execute("""
@@ -245,7 +246,7 @@ def create_task():
         })
     except Exception as e:
         # 删除已创建的任务目录
-        task_dir = os.path.join(get_script_upload_path(), str(task_id)) if 'task_id' in dir() else None
+        task_dir = os.path.join(get_script_upload_path(), str(task_id)) if task_id else None
         if task_dir and os.path.exists(task_dir):
             shutil.rmtree(task_dir)
         return jsonify({
@@ -486,6 +487,10 @@ def toggle_task(task_id):
             remove_task_from_scheduler(task_id)
             message = '任务已禁用'
         
+        # 记录操作日志
+        log_operation('定时任务', 'toggle', task_id, task['name'],
+                     detail={'is_active': new_status})
+        
         return jsonify({
             'code': 200,
             'message': message,
@@ -626,6 +631,9 @@ def run_task(task_id):
         thread.daemon = True
         thread.start()
 
+        # 记录操作日志
+        log_operation('定时任务', 'run', task_id, task['name'])
+        
         return jsonify({"code": 200, "message": "任务已开始执行"})
     except Exception as e:
         return jsonify({

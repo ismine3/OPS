@@ -603,6 +603,10 @@ def sync_aliyun_domains():
         
         db.commit()
         
+        # 记录操作日志
+        log_operation(module='域名管理', action='sync', target_name='阿里云域名同步',
+                     detail={'total': len(all_domains), 'added': added_count, 'updated': updated_count})
+        
         return jsonify({
             'code': 200,
             'message': '同步成功',
@@ -670,6 +674,9 @@ def trigger_domain_notify():
         warning_count = len(domains) - expired_count
         
         if success:
+            # 记录操作日志
+            log_operation('域名管理', 'notify', target_name='域名到期预警',
+                         detail={'total': len(domains), 'expired': expired_count, 'warning': warning_count})
             return jsonify({
                 'code': 200,
                 'message': '通知发送成功',

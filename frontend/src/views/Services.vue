@@ -231,11 +231,11 @@ const rules = {
   service_name: [
     { required: true, message: '请输入服务名称', trigger: 'blur' },
     { validator: safeText, trigger: 'blur' },
-    { validator: maxLength(200), trigger: 'blur' }
+    { validator: maxLength(100), trigger: 'blur' }
   ],
   version: [
     { validator: safeText, trigger: 'blur' },
-    { validator: maxLength(100), trigger: 'blur' }
+    { validator: maxLength(50), trigger: 'blur' }
   ],
   inner_port: [
     { validator: portValidator, trigger: 'blur' }

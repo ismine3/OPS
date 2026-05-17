@@ -6,7 +6,11 @@ from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.password_utils import encrypt_data, decrypt_data
+from ..utils.validators import validate_port, validate_string_length
 from .users import get_user_allowed_envs
+import logging
+
+logger = logging.getLogger(__name__)
 
 services_bp = Blueprint('services', __name__, url_prefix='/api/services')
 
@@ -104,6 +108,7 @@ def get_services():
                 try:
                     s['password'] = decrypt_data(s['password'])
                 except:
+                    logger.warning(f'服务密码解密失败: service_id={s.get("id")}')
                     pass
 
         return jsonify({
@@ -123,6 +128,46 @@ def create_service():
     cursor = db.cursor()
     try:
         data = request.json
+        if not data:
+            return jsonify({"code": 400, "message": "请求体不能为空"}), 400
+
+        # 输入验证
+        server_id = data.get('server_id')
+        if not server_id:
+            return jsonify({'code': 400, 'message': '服务器ID不能为空'}), 400
+
+        service_name = data.get('service_name')
+        if not service_name:
+            return jsonify({'code': 400, 'message': '服务名称不能为空'}), 400
+        if not validate_string_length(service_name, min_len=1, max_len=100):
+            return jsonify({'code': 400, 'message': '服务名称长度必须在1-100个字符之间'}), 400
+
+        category = data.get('category')
+        if not category:
+            return jsonify({'code': 400, 'message': '服务分类不能为空'}), 400
+        if not validate_string_length(category, max_len=50):
+            return jsonify({'code': 400, 'message': '服务分类长度不能超过50个字符'}), 400
+
+        version = data.get('version')
+        if version and not validate_string_length(version, max_len=50):
+            return jsonify({'code': 400, 'message': '版本号长度不能超过50个字符'}), 400
+
+        inner_port = data.get('inner_port')
+        if inner_port is not None and not validate_port(inner_port):
+            return jsonify({'code': 400, 'message': '内网端口范围应为1-65535'}), 400
+
+        mapped_port = data.get('mapped_port')
+        if mapped_port is not None and not validate_port(mapped_port):
+            return jsonify({'code': 400, 'message': '映射端口范围应为1-65535'}), 400
+
+        account = data.get('account')
+        if account and not validate_string_length(account, max_len=100):
+            return jsonify({'code': 400, 'message': '账户名长度不能超过100个字符'}), 400
+
+        remark = data.get('remark')
+        if remark and not validate_string_length(remark, max_len=500):
+            return jsonify({'code': 400, 'message': '备注长度不能超过500个字符'}), 400
+
         password_encrypted = encrypt_data(data['password']) if data.get('password') else None
         cursor.execute(
             "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, account, password, remark) "
@@ -164,6 +209,32 @@ def update_service(service_id):
         old_service = cursor.fetchone()
         service_name = old_service['service_name'] if old_service else None
         data = request.json
+        if not data:
+            return jsonify({"code": 400, "message": "请求体不能为空"}), 400
+
+        # 输入验证（仅验证存在的字段）
+        if 'service_name' in data and data['service_name']:
+            if not validate_string_length(data['service_name'], min_len=1, max_len=100):
+                return jsonify({'code': 400, 'message': '服务名称长度必须在1-100个字符之间'}), 400
+        if 'category' in data and data['category']:
+            if not validate_string_length(data['category'], max_len=50):
+                return jsonify({'code': 400, 'message': '服务分类长度不能超过50个字符'}), 400
+        if 'version' in data and data['version']:
+            if not validate_string_length(data['version'], max_len=50):
+                return jsonify({'code': 400, 'message': '版本号长度不能超过50个字符'}), 400
+        if 'inner_port' in data and data['inner_port'] is not None:
+            if not validate_port(data['inner_port']):
+                return jsonify({'code': 400, 'message': '内网端口范围应为1-65535'}), 400
+        if 'mapped_port' in data and data['mapped_port'] is not None:
+            if not validate_port(data['mapped_port']):
+                return jsonify({'code': 400, 'message': '映射端口范围应为1-65535'}), 400
+        if 'account' in data and data['account']:
+            if not validate_string_length(data['account'], max_len=100):
+                return jsonify({'code': 400, 'message': '账户名长度不能超过100个字符'}), 400
+        if 'remark' in data and data['remark']:
+            if not validate_string_length(data['remark'], max_len=500):
+                return jsonify({'code': 400, 'message': '备注长度不能超过500个字符'}), 400
+
         if 'password' in data and data['password']:
             data['password'] = encrypt_data(data['password'])
         fields = []
@@ -184,7 +255,8 @@ def update_service(service_id):
                     (service_id, pid)
                 )
         db.commit()
-        log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name)
+        log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name,
+                     detail={'updated_fields': list(data.keys())})
         return jsonify({'code': 200, 'message': '更新成功'})
     except Exception as e:
         db.rollback()

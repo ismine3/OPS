@@ -18,7 +18,7 @@ def _issued_at_naive(payload):
             dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
         return dt
     try:
-        return datetime.utcfromtimestamp(int(iat))
+        return datetime.fromtimestamp(int(iat), tz=timezone.utc).replace(tzinfo=None)
     except (TypeError, ValueError, OSError):
         return None
 

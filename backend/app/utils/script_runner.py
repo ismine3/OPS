@@ -3,6 +3,7 @@
 """
 import os
 import sys
+import shlex
 import shutil
 import subprocess
 import logging
@@ -36,9 +37,11 @@ def run_custom_command(command, work_dir, timeout=300):
     
     logger.info(f"在目录 {work_dir} 执行命令: {command}")
     
+    # 使用 shlex.split 解析命令，避免 shell=True 的注入风险
+    cmd_parts = shlex.split(command)
     return subprocess.run(
-        command,
-        shell=True,
+        cmd_parts,
+        shell=False,
         cwd=work_dir,
         capture_output=True,
         text=True,

@@ -693,6 +693,10 @@ def batch_check_certs():
                 })
                 failed_count += 1
         
+        # 记录操作日志
+        log_operation(module='证书管理', action='check', target_name=f'批量检测',
+                     detail={'total': len(certs), 'success': success_count, 'failed': failed_count})
+        
         return jsonify({
             'code': 200,
             'message': '检测完成',
@@ -764,6 +768,10 @@ def check_single_cert(cert_id):
             ))
             db.commit()
             
+            # 记录操作日志
+            log_operation(module='证书管理', action='check', target_id=cert_id, target_name=domain,
+                         detail={'remaining_days': cert_info['remaining_days'], 'has_expired': cert_info['has_expired']})
+            
             return jsonify({
                 'code': 200,
                 'message': '检测成功',
@@ -789,6 +797,10 @@ def check_single_cert(cert_id):
             """
             cursor.execute(update_sql, (cert_id,))
             db.commit()
+            
+            # 记录操作日志
+            log_operation(module='证书管理', action='check', target_id=cert_id, target_name=domain,
+                         detail={'status': 'failed'})
             
             return jsonify({
                 'code': 500,
@@ -853,7 +865,7 @@ def sync_aliyun_certs():
             return jsonify({
                 'code': 500,
                 'message': f'同步阿里云证书失败: {str(e)}'
-            }), 200
+            }), 500
         
         if not aliyun_certs:
             return jsonify({
@@ -1091,6 +1103,10 @@ def trigger_notify():
                     WHERE id = %s
                 """, (cert['id'],))
             db.commit()
+            
+            # 记录操作日志
+            log_operation(module='证书管理', action='notify', target_name='证书预警通知',
+                         detail={'notified': len(certs), 'status': 'success'})
             
             return jsonify({
                 'code': 200,
@@ -1336,7 +1352,7 @@ def deploy_cert(cert_id):
 
         # 端口参数验证
         if not isinstance(ssh_port, int) or ssh_port < 1 or ssh_port > 65535:
-            return jsonify({'code': 400, 'message': 'SSH端口范围应为1-65535'}), 200
+            return jsonify({'code': 400, 'message': 'SSH端口范围应为1-65535'}), 400
 
         if not server_id:
             return jsonify({'code': 400, 'message': 'server_id不能为空'}), 400
@@ -1373,7 +1389,7 @@ def deploy_cert(cert_id):
         ssh_host = ip_map.get(ssh_ip_type) or server.get('inner_ip')
 
         if not ssh_host:
-            return jsonify({'code': 400, 'message': f'所选服务器的{ssh_ip_type}IP为空'}), 200
+            return jsonify({'code': 400, 'message': f'所选服务器的{ssh_ip_type}IP为空'}), 400
 
         # 根据 ssh_user_type 选择用户名和密码
         if ssh_user_type == 'docker':

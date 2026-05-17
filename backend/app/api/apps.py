@@ -296,7 +296,8 @@ def update_app(app_id):
             db.commit()
             
             # 记录操作日志
-            log_operation('账号', 'update', app_id, data.get('name') or app_name)
+            log_operation('账号', 'update', app_id, data.get('name') or app_name,
+                         detail={'updated_fields': list(data.keys())})
             
         return jsonify({
             'code': 200,

@@ -180,7 +180,15 @@ def add_config_option():
             (config_id, option_value, 1 if is_default else 0)
         )
         db.commit()
-        return jsonify({"code": 200, "message": "添加成功", "data": {"id": cursor.lastrowid}})
+        option_id = cursor.lastrowid
+
+        # 查询 config_key 用于日志
+        cursor.execute("SELECT config_key FROM pipeline_configs WHERE id = %s", (config_id,))
+        cfg_row = cursor.fetchone()
+        log_operation('部署配置', 'create', option_id, option_value,
+                      {'config_key': cfg_row['config_key'] if cfg_row else '', 'is_default': bool(is_default)})
+
+        return jsonify({"code": 200, "message": "添加成功", "data": {"id": option_id}})
     except Exception as e:
         db.rollback()
         return jsonify({"code": 500, "message": f"添加失败: {str(e)}"}), 500
@@ -218,6 +226,9 @@ def update_config_option(option_id):
             )
             db.commit()
 
+            log_operation('部署配置', 'update', option_id, option_value,
+                          {'is_default': bool(is_default)})
+
         return jsonify({"code": 200, "message": "更新成功"})
     except Exception as e:
         db.rollback()
@@ -236,8 +247,22 @@ def delete_config_option(option_id):
     db = get_db()
     cursor = db.cursor()
     try:
+        # 删除前查询选项信息用于日志
+        cursor.execute("""
+            SELECT o.option_value, c.config_key
+            FROM pipeline_config_options o
+            JOIN pipeline_configs c ON o.config_id = c.id
+            WHERE o.id = %s
+        """, (option_id,))
+        opt_row = cursor.fetchone()
+
         cursor.execute("DELETE FROM pipeline_config_options WHERE id = %s", (option_id,))
         db.commit()
+
+        if opt_row:
+            log_operation('部署配置', 'delete', option_id, opt_row['option_value'],
+                          {'config_key': opt_row['config_key']})
+
         return jsonify({"code": 200, "message": "删除成功"})
     except Exception as e:
         db.rollback()

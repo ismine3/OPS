@@ -215,6 +215,7 @@
               <el-tag v-if="field.pipeline_type" size="small" type="warning">{{ field.pipeline_type === 'backend' ? '后端' : '前端' }}</el-tag>
               <el-tag v-else size="small" type="success">共用</el-tag>
             </div>
+            <div v-if="field.description" class="option-field-desc">{{ field.description }}</div>
 
             <div class="option-tags">
               <template v-if="field.options.length">
@@ -807,6 +808,14 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 12px;
   color: #909399;
+}
+
+.option-field-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  padding-left: 2px;
 }
 
 .option-tags {

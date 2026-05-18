@@ -154,11 +154,11 @@ def create_service():
 
         inner_port = data.get('inner_port')
         if inner_port and not validate_port(inner_port):
-            return jsonify({'code': 400, 'message': '内网端口范围应为1-65535'}), 400
+            return jsonify({'code': 400, 'message': '内网端口范围应为1-65535，多个端口用逗号分隔'}), 400
 
         mapped_port = data.get('mapped_port')
         if mapped_port and not validate_port(mapped_port):
-            return jsonify({'code': 400, 'message': '映射端口范围应为1-65535'}), 400
+            return jsonify({'code': 400, 'message': '映射端口范围应为1-65535，多个端口用逗号分隔'}), 400
 
         account = data.get('account')
         if account and not validate_string_length(account, max_len=100):
@@ -224,10 +224,10 @@ def update_service(service_id):
                 return jsonify({'code': 400, 'message': '版本号长度不能超过50个字符'}), 400
         if 'inner_port' in data and data['inner_port']:
             if not validate_port(data['inner_port']):
-                return jsonify({'code': 400, 'message': '内网端口范围应为1-65535'}), 400
+                return jsonify({'code': 400, 'message': '内网端口范围应为1-65535，多个端口用逗号分隔'}), 400
         if 'mapped_port' in data and data['mapped_port']:
             if not validate_port(data['mapped_port']):
-                return jsonify({'code': 400, 'message': '映射端口范围应为1-65535'}), 400
+                return jsonify({'code': 400, 'message': '映射端口范围应为1-65535，多个端口用逗号分隔'}), 400
         if 'account' in data and data['account']:
             if not validate_string_length(data['account'], max_len=100):
                 return jsonify({'code': 400, 'message': '账户名长度不能超过100个字符'}), 400

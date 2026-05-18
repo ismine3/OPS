@@ -59,13 +59,20 @@ def validate_url(url):
 
 def validate_port(port):
     """
-    验证端口号
+    验证端口号，支持逗号分隔的多端口（如 "8080,8443"）
     """
     if not port:
         return False
     try:
-        port_num = int(port)
-        return 1 <= port_num <= 65535
+        ports = str(port).split(',')
+        for p in ports:
+            p = p.strip()
+            if not p:
+                continue
+            port_num = int(p)
+            if port_num < 1 or port_num > 65535:
+                return False
+        return True
     except ValueError:
         return False
 

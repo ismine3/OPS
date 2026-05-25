@@ -66,8 +66,8 @@ def init_database():
         `purpose` VARCHAR(500) COMMENT '用途',
         `os_user` VARCHAR(100) COMMENT '系统账户',
         `os_password` VARCHAR(255) COMMENT '系统密码',
-        `docker_user` VARCHAR(100) COMMENT '普通用户名',
-        `docker_password` VARCHAR(255) COMMENT '普通用户密码',
+        `regular_user` VARCHAR(100) COMMENT '普通用户名',
+        `regular_password` VARCHAR(255) COMMENT '普通用户密码',
         `remark` TEXT COMMENT '备注',
         `cert_path` VARCHAR(255) DEFAULT NULL COMMENT '证书路径',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -253,6 +253,22 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行日志表';
     """)
 
+    # 密码轮换日志表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `password_rotation_logs` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `server_id` INT NOT NULL COMMENT '服务器ID',
+        `old_password_hash` VARCHAR(255) COMMENT '旧密码哈希(仅用于比对)',
+        `status` VARCHAR(20) NOT NULL COMMENT '执行状态: success/failed',
+        `error_message` TEXT COMMENT '错误信息',
+        `rotated_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '轮换时间',
+        INDEX `idx_server_id` (`server_id`),
+        INDEX `idx_status` (`status`),
+        INDEX `idx_rotated_at` (`rotated_at`),
+        FOREIGN KEY (`server_id`) REFERENCES `servers`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='密码轮换日志表';
+    """)
+
     # 10. 操作日志表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `operation_logs` (
@@ -298,6 +314,16 @@ def init_database():
     VALUES (%s, %s, %s, %s, %s)
     """, ('admin', admin_password_hash, '系统管理员', 'admin', True))
 
+    # 插入默认系统配置（内置任务参数）
+    cursor.execute("""
+    INSERT IGNORE INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
+    ('cert_auto_check_cron', '0 8 * * *', 'SSL证书自动检测Cron表达式'),
+    ('ssl_warning_days', '30', 'SSL证书到期预警天数'),
+    ('domain_auto_notify_cron', '0 8 * * *', '域名到期通知Cron表达式'),
+    ('domain_warning_days', '30', '域名到期预警天数'),
+    ('password_rotation_cron', '0 3 * * *', '密码轮换检查Cron表达式')
+    """)
+
     # 插入默认环境类型
     cursor.execute("""
     INSERT IGNORE INTO `dict_env_types` (`name`, `sort_order`) VALUES
@@ -326,7 +352,7 @@ def init_database():
     ('运行中', 1), ('已下线', 2), ('规划中', 3)
     """)
 
-    # 插入 operator 角色默认模块授权（8个模块全授权）
+    # 插入 operator 角色默认模块授权（9个模块全授权）
     cursor.execute("""
     INSERT IGNORE INTO `role_modules` (`role`, `module`) VALUES
     ('operator', 'servers'),
@@ -598,7 +624,18 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流水线配置可选值表';
     """)
 
-    # 18. 流水线生成历史表
+    # 18. 系统配置表（内置任务参数管理）
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `system_config` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `config_key` VARCHAR(100) NOT NULL UNIQUE COMMENT '配置键',
+        `config_value` VARCHAR(500) NOT NULL COMMENT '配置值',
+        `description` VARCHAR(200) COMMENT '配置说明',
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
+    """)
+
+    # 19. 流水线生成历史表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `pipeline_generations` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -642,6 +679,36 @@ def init_database():
 
     # 为 accounts 表添加 project_id 字段
     add_column_if_not_exists('accounts', 'project_id', '`project_id` INT DEFAULT NULL COMMENT "所属项目ID"')
+
+    # 为 servers 表添加密码定期更新相关字段
+    add_column_if_not_exists('servers', 'password_rotation_enabled', '`password_rotation_enabled` TINYINT(1) DEFAULT 0 COMMENT "是否启用定期更新密码 0:否 1:是"')
+    add_column_if_not_exists('servers', 'password_rotation_days', '`password_rotation_days` INT DEFAULT 30 COMMENT "密码更新周期(天)"')
+    add_column_if_not_exists('servers', 'password_last_rotated_at', '`password_last_rotated_at` DATETIME DEFAULT NULL COMMENT "上次更新密码时间"')
+    add_column_if_not_exists('servers', 'password_rotation_status', '`password_rotation_status` VARCHAR(20) DEFAULT "idle" COMMENT "密码轮换状态: idle/running/success/failed"')
+    add_column_if_not_exists('servers', 'password_rotation_error', '`password_rotation_error` TEXT DEFAULT NULL COMMENT "最近一次密码更新失败的错误信息"')
+
+    # 将 docker_user/docker_password 重命名为 regular_user/regular_password（如果旧列存在且新列不存在）
+    def rename_column_if_needed(table_name, old_name, new_name, column_def):
+        """如果 old_name 列存在且 new_name 列不存在，则将 old_name 重命名为 new_name"""
+        try:
+            cursor.execute(f"""
+                SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s
+            """, (Config.DB_NAME, table_name, old_name))
+            old_exists = cursor.fetchone()['cnt'] > 0
+            cursor.execute(f"""
+                SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s
+            """, (Config.DB_NAME, table_name, new_name))
+            new_exists = cursor.fetchone()['cnt'] > 0
+            if old_exists and not new_exists:
+                cursor.execute(f"ALTER TABLE `{table_name}` CHANGE COLUMN `{old_name}` {column_def}")
+                print(f"已将 {table_name}.{old_name} 重命名为 {new_name}")
+        except Exception as e:
+            print(f"重命名 {table_name}.{old_name} 到 {new_name} 时出错: {e}")
+
+    rename_column_if_needed('servers', 'docker_user', 'regular_user', '`regular_user` VARCHAR(100) COMMENT "普通用户名"')
+    rename_column_if_needed('servers', 'docker_password', 'regular_password', '`regular_password` VARCHAR(255) COMMENT "普通用户密码"')
 
     # 为 pipeline_configs 表添加 pipeline_type 字段
     add_column_if_not_exists('pipeline_configs', 'pipeline_type', '`pipeline_type` VARCHAR(20) DEFAULT NULL COMMENT "适用流水线类型: backend=后端, frontend=前端, NULL=共用" AFTER `required`')

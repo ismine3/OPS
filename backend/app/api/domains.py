@@ -636,7 +636,6 @@ def trigger_domain_notify():
     
     返回: {"code": 200, "message": "通知发送成功", "data": {"total": N, "expired": N, "warning": N}}
     """
-    warning_days = current_app.config.get('DOMAIN_WARNING_DAYS', 30)
     webhook_url = current_app.config.get('WECHAT_WEBHOOK_URL', '')
     
     if not webhook_url:
@@ -648,6 +647,16 @@ def trigger_domain_notify():
     db = get_db()
     cursor = db.cursor()
     try:
+        # 从 system_config 表动态读取预警天数，fallback 到环境变量
+        warning_days = 30
+        try:
+            cursor.execute("SELECT config_value FROM system_config WHERE config_key = 'domain_warning_days'")
+            row = cursor.fetchone()
+            if row and row['config_value']:
+                warning_days = int(row['config_value'])
+        except Exception:
+            warning_days = current_app.config.get('DOMAIN_WARNING_DAYS', 30)
+        
         # 查询即将过期或已过期的域名
         cursor.execute("""
             SELECT id, domain_name, owner, expire_date, 

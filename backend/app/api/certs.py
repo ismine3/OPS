@@ -1066,8 +1066,16 @@ def trigger_notify():
     db = get_db()
     cursor = db.cursor()
     try:
-        # 从配置获取预警天数
-        warning_days = current_app.config.get('SSL_WARNING_DAYS', 30)
+        # 从 system_config 表动态读取预警天数，fallback 到环境变量
+        warning_days = 30
+        try:
+            cursor.execute("SELECT config_value FROM system_config WHERE config_key = 'ssl_warning_days'")
+            row = cursor.fetchone()
+            if row and row['config_value']:
+                warning_days = int(row['config_value'])
+        except Exception:
+            warning_days = current_app.config.get('SSL_WARNING_DAYS', 30)
+        
         webhook_url = current_app.config.get('WECHAT_WEBHOOK_URL', '')
         
         if not webhook_url:
@@ -1337,7 +1345,7 @@ def deploy_cert(cert_id):
     """
     远程部署证书
     请求体: { "server_id": 1, "remote_path": "/etc/nginx/ssl/", "ssh_user": "root" }
-    ssh_user 可选值: "root"(使用系统用户), "docker"(使用普通用户)
+    ssh_user 可选值: "root"(使用系统用户), "regular"(使用普通用户)
     使用 SSH/SFTP 上传证书到远程服务器
     """
     db = get_db()
@@ -1346,7 +1354,7 @@ def deploy_cert(cert_id):
         data = request.json or {}
         server_id = data.get('server_id')
         remote_path = data.get('remote_path', '/etc/nginx/ssl/')
-        ssh_user_type = data.get('ssh_user', 'root')  # root 或 docker
+        ssh_user_type = data.get('ssh_user', 'root')  # root 或 regular
         ssh_ip_type = data.get('ssh_ip_type', 'inner')  # 可选值: inner, mapped, public
         ssh_port = data.get('ssh_port', 22)  # 默认22
 
@@ -1372,7 +1380,7 @@ def deploy_cert(cert_id):
 
         # 查询服务器信息
         cursor.execute("""
-            SELECT inner_ip, mapped_ip, public_ip, os_user, os_password, docker_user, docker_password
+            SELECT inner_ip, mapped_ip, public_ip, os_user, os_password, regular_user, regular_password
             FROM servers WHERE id = %s
         """, (server_id,))
         server = cursor.fetchone()
@@ -1392,9 +1400,9 @@ def deploy_cert(cert_id):
             return jsonify({'code': 400, 'message': f'所选服务器的{ssh_ip_type}IP为空'}), 400
 
         # 根据 ssh_user_type 选择用户名和密码
-        if ssh_user_type == 'docker':
-            ssh_username = server.get('docker_user') or 'docker'
-            ssh_password_encrypted = server.get('docker_password')
+        if ssh_user_type == 'regular':
+            ssh_username = server.get('regular_user') or 'docker'
+            ssh_password_encrypted = server.get('regular_password')
             if not ssh_password_encrypted:
                 return jsonify({'code': 400, 'message': '该服务器未配置普通用户密码'}), 400
             # 解密密码

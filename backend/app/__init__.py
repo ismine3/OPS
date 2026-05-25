@@ -132,6 +132,7 @@ def register_blueprints(app):
     from .api.projects import projects_bp
     from .api.role_modules import role_modules_bp
     from .api.pipeline import pipeline_bp
+    from .api.system_config import system_config_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
@@ -150,3 +151,4 @@ def register_blueprints(app):
     app.register_blueprint(projects_bp)
     app.register_blueprint(role_modules_bp)
     app.register_blueprint(pipeline_bp)
+    app.register_blueprint(system_config_bp)

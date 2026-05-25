@@ -354,9 +354,9 @@
               系统用户
               <span v-if="selectedServer" class="ssh-user-info">({{ selectedServer.os_user || 'root' }})</span>
             </el-radio>
-            <el-radio value="docker" :disabled="!selectedServer || !selectedServer.docker_user">
+            <el-radio value="regular" :disabled="!selectedServer || !selectedServer.regular_user">
               普通用户
-              <span v-if="selectedServer && selectedServer.docker_user" class="ssh-user-info">({{ selectedServer.docker_user }})</span>
+              <span v-if="selectedServer && selectedServer.regular_user" class="ssh-user-info">({{ selectedServer.regular_user }})</span>
               <span v-else class="ssh-user-info text-muted">(未配置)</span>
             </el-radio>
           </el-radio-group>
@@ -845,7 +845,7 @@ function handleDeployFilterChange() {
 function handleServerChange(serverId: number) {
   selectedServer.value = serverList.value.find(s => s.id === serverId) || null
   // 如果服务器没有普通用户，自动选择系统用户
-  if (selectedServer.value && !selectedServer.value.docker_user) {
+  if (selectedServer.value && !selectedServer.value.regular_user) {
     deployForm.ssh_user = 'root'
   }
   // 自动填充远程目录：使用服务器的 cert_path 字段，若为空则设为空字符串

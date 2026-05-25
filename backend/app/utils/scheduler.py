@@ -302,13 +302,37 @@ def init_scheduler(app):
         # 构建 app_config 字典（用于内置任务回调）
         app_config = {
             'wechat_webhook_url': app.config.get('WECHAT_WEBHOOK_URL', ''),
-            'ssl_warning_days': app.config.get('SSL_WARNING_DAYS', 30),
             'ssl_check_timeout': app.config.get('SSL_CHECK_TIMEOUT', 10),
-            'domain_warning_days': app.config.get('DOMAIN_WARNING_DAYS', 30)
+            'password_rotation_length': app.config.get('PASSWORD_ROTATION_LENGTH', 16)
         }
         
+        # 尝试从 system_config 表读取 Cron 表达式（优先于环境变量）
+        cert_cron_from_db = None
+        domain_cron_from_db = None
+        pw_cron_from_db = None
+        conn2 = None
+        cursor2 = None
+        try:
+            conn2 = get_db_connection(db_config)
+            cursor2 = conn2.cursor()
+            cursor2.execute("SELECT config_key, config_value FROM system_config")
+            for row in cursor2.fetchall():
+                if row['config_key'] == 'cert_auto_check_cron':
+                    cert_cron_from_db = row['config_value']
+                elif row['config_key'] == 'domain_auto_notify_cron':
+                    domain_cron_from_db = row['config_value']
+                elif row['config_key'] == 'password_rotation_cron':
+                    pw_cron_from_db = row['config_value']
+        except Exception as e:
+            logger.warning("读取 system_config 表失败，将使用环境变量默认值: %s", e)
+        finally:
+            if cursor2:
+                cursor2.close()
+            if conn2:
+                conn2.close()
+        
         # 注册内置定时任务：SSL证书自动检测+通知
-        cert_cron = app.config.get('CERT_AUTO_CHECK_CRON', '0 8 * * *')
+        cert_cron = cert_cron_from_db or app.config.get('CERT_AUTO_CHECK_CRON', '0 8 * * *')
         try:
             parts = cert_cron.split()
             if len(parts) == 5:
@@ -337,7 +361,7 @@ def init_scheduler(app):
             logger.exception("注册SSL证书自动检测任务失败: %s", e)
         
         # 注册内置定时任务：域名到期自动通知
-        domain_cron = app.config.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')
+        domain_cron = domain_cron_from_db or app.config.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')
         try:
             parts = domain_cron.split()
             if len(parts) == 5:
@@ -365,6 +389,35 @@ def init_scheduler(app):
         except Exception as e:
             logger.exception("注册域名到期自动通知任务失败: %s", e)
         
+        # 注册内置定时任务：服务器密码定期轮换
+        password_rotation_cron = pw_cron_from_db or app.config.get('PASSWORD_ROTATION_CHECK_CRON', '0 3 * * *')
+        try:
+            parts = password_rotation_cron.split()
+            if len(parts) == 5:
+                minute, hour, day, month, day_of_week = parts
+                pr_trigger = CronTrigger(
+                    minute=minute,
+                    hour=hour,
+                    day=day,
+                    month=month,
+                    day_of_week=day_of_week
+                )
+                
+                # 移除已存在的任务
+                if scheduler.get_job('builtin_password_rotation'):
+                    scheduler.remove_job('builtin_password_rotation')
+                
+                scheduler.add_job(
+                    func=auto_password_rotation,
+                    trigger=pr_trigger,
+                    id='builtin_password_rotation',
+                    args=[db_config, app_config],
+                    replace_existing=True
+                )
+                logger.info("已注册内置任务: 服务器密码定期轮换 (cron: %s)", password_rotation_cron)
+        except Exception as e:
+            logger.exception("注册服务器密码定期轮换任务失败: %s", e)
+        
         # 启动调度器
         if not scheduler.running:
             scheduler.start()
@@ -386,6 +439,67 @@ def init_scheduler(app):
 def get_scheduler_db_config():
     """获取调度器的数据库配置"""
     return getattr(scheduler, 'db_config', None)
+
+
+def reschedule_builtin_job(job_id, cron_expression):
+    """
+    运行时重调度内置任务的 Cron 触发器
+    
+    Args:
+        job_id: 内置任务 job ID（如 builtin_cert_check_notify）
+        cron_expression: 5段 Cron 表达式 "分 时 日 月 周"
+    Returns:
+        bool: 是否成功
+    """
+    try:
+        parts = cron_expression.split()
+        if len(parts) != 5:
+            logger.error("Cron 表达式格式错误: %s", cron_expression)
+            return False
+
+        minute, hour, day, month, day_of_week = parts
+        trigger = CronTrigger(
+            minute=minute,
+            hour=hour,
+            day=day,
+            month=month,
+            day_of_week=day_of_week
+        )
+
+        scheduler.reschedule_job(job_id, trigger=trigger)
+        logger.info("已重调度内置任务 %s, cron=%s", job_id, cron_expression)
+        return True
+    except Exception as e:
+        logger.exception("重调度内置任务 %s 失败: %s", job_id, e)
+        return False
+
+
+def get_effective_config(db_config, config_key, fallback=None):
+    """
+    从 system_config 表读取配置值，不存在时返回 fallback
+    供内置任务回调函数在运行时动态读取
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection(db_config)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT config_value FROM system_config WHERE config_key = %s",
+            (config_key,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return row['config_value']
+        return fallback
+    except Exception as e:
+        logger.warning("读取系统配置 %s 失败: %s", config_key, e)
+        return fallback
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 def auto_cert_check_and_notify(db_config, app_config):
@@ -488,8 +602,9 @@ def auto_cert_check_and_notify(db_config, app_config):
             except Exception as e:
                 logger.error(f"证书 {cert['domain']} 检测异常: {str(e)}")
         
-        # 查询需要预警的证书
-        warning_days = app_config.get('ssl_warning_days', 30)
+        # 查询需要预警的证书（从 system_config 动态读取天数）
+        warning_days_raw = get_effective_config(db_config, 'ssl_warning_days', '30')
+        warning_days = int(warning_days_raw) if warning_days_raw else 30
         cursor.execute("""
             SELECT id, domain, project_name, cert_expire_time, remaining_days
             FROM ssl_certificates
@@ -544,8 +659,9 @@ def auto_domain_notify(db_config, app_config):
         conn = get_db_connection(db_config)
         cursor = conn.cursor()
         
-        # 查询即将过期或已过期的域名
-        warning_days = app_config.get('domain_warning_days', 30)
+        # 查询即将过期或已过期的域名（从 system_config 动态读取天数）
+        warning_days_raw = get_effective_config(db_config, 'domain_warning_days', '30')
+        warning_days = int(warning_days_raw) if warning_days_raw else 30
         cursor.execute("""
             SELECT id, domain_name, owner, expire_date, 
                    DATEDIFF(expire_date, NOW()) as remaining_days
@@ -572,6 +688,78 @@ def auto_domain_notify(db_config, app_config):
             
     except Exception as e:
         logger.error(f"自动域名到期通知任务执行失败: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def auto_password_rotation(db_config, app_config):
+    """
+    自动服务器密码轮换回调函数
+    逐台检查并执行密码轮换，采用串行执行确保安全
+    """
+    from .password_rotator import rotate_server_password
+    
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection(db_config)
+        cursor = conn.cursor()
+        
+        # 查询所有启用了密码定期更新且未在运行中的服务器
+        cursor.execute("""
+            SELECT * FROM servers 
+            WHERE password_rotation_enabled = 1 
+              AND password_rotation_status != 'running'
+            ORDER BY id
+        """)
+        servers = cursor.fetchall()
+        
+        if not servers:
+            logger.info("密码轮换检查完成：没有需要处理的服务器")
+            return
+        
+        logger.info(f"开始检查 {len(servers)} 台服务器的密码轮换状态")
+        
+        now = datetime.datetime.now()
+        rotated_count = 0
+        skipped_count = 0
+        failed_count = 0
+        
+        for server in servers:
+            server_id = server['id']
+            hostname = server.get('hostname', str(server_id))
+            
+            # 检查是否需要轮换
+            last_rotated = server.get('password_last_rotated_at')
+            rotation_days = server.get('password_rotation_days', 30)
+            
+            if last_rotated:
+                days_since = (now - last_rotated).days
+                if days_since < rotation_days:
+                    skipped_count += 1
+                    logger.debug("服务器 %s: 上次更新于 %s，距今 %s 天，未到 %s 天周期，跳过",
+                               hostname, last_rotated.strftime('%Y-%m-%d'), days_since, rotation_days)
+                    continue
+            
+            # 执行密码轮换
+            logger.info("服务器 %s: 开始执行密码轮换...", hostname)
+            result = rotate_server_password(server, db_config)
+            
+            if result.get('success'):
+                rotated_count += 1
+                logger.info("服务器 %s: 密码轮换成功", hostname)
+            else:
+                failed_count += 1
+                logger.error("服务器 %s: 密码轮换失败 - %s", hostname, result.get('message'))
+        
+        logger.info("密码轮换检查完成: 成功=%s, 跳过=%s, 失败=%s", rotated_count, skipped_count, failed_count)
+            
+    except Exception as e:
+        logger.error(f"密码轮换定时任务执行失败: {str(e)}")
     finally:
         if cursor:
             cursor.close()

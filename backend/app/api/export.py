@@ -132,8 +132,8 @@ def export_excel():
                 safe_value(server.get("purpose")),
                 safe_value(server.get("os_user")),
                 safe_value(safe_decrypt(server.get("os_password", ""))),
-                safe_value(server.get("docker_user")),
-                safe_value(safe_decrypt(server.get("docker_password", ""))),
+                safe_value(server.get("regular_user")),
+                safe_value(safe_decrypt(server.get("regular_password", ""))),
                 safe_value(server.get("remark")),
             ]
             data_rows1.append(row_data)

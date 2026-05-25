@@ -12,6 +12,7 @@ from ..utils.scheduler import (
     add_task_to_scheduler,
     remove_task_from_scheduler,
     get_scheduler_db_config,
+    scheduler,
 )
 from ..utils.script_runner import assert_allowed_script, run_script_file
 
@@ -117,7 +118,7 @@ def get_tasks():
             LEFT JOIN users u ON t.created_by = u.id
             ORDER BY t.created_at DESC
         """)
-        tasks = cursor.fetchall()
+        tasks = list(cursor.fetchall())
         
         # 解析 script_files JSON 字段
         for task in tasks:
@@ -128,6 +129,87 @@ def get_tasks():
                     task['script_files'] = []
             else:
                 task['script_files'] = []
+            task['is_builtin'] = False
+        
+        # 追加系统内置定时任务（从 system_config 表读取 Cron 表达式）
+        cert_cron = '0 8 * * *'
+        domain_cron = '0 8 * * *'
+        pw_cron = '0 3 * * *'
+        try:
+            cursor.execute("SELECT config_key, config_value FROM system_config")
+            for row in cursor.fetchall():
+                if row['config_key'] == 'cert_auto_check_cron':
+                    cert_cron = row['config_value']
+                elif row['config_key'] == 'domain_auto_notify_cron':
+                    domain_cron = row['config_value']
+                elif row['config_key'] == 'password_rotation_cron':
+                    pw_cron = row['config_value']
+        except Exception:
+            # system_config 表可能还不存在，fallback 到环境变量
+            cert_cron = current_app.config.get('CERT_AUTO_CHECK_CRON', '0 8 * * *')
+            domain_cron = current_app.config.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')
+            pw_cron = current_app.config.get('PASSWORD_ROTATION_CHECK_CRON', '0 3 * * *')
+
+        builtin_tasks = [
+            {
+                'id': -1,
+                'name': 'SSL证书自动检测',
+                'task_type': 'builtin',
+                'description': '每天定时检测SSL证书有效期，即将到期时通过企业微信发送告警通知',
+                'cron_expression': cert_cron,
+                'is_active': scheduler.get_job('builtin_cert_check_notify') is not None if scheduler.running else True,
+                'is_builtin': True,
+                'script_files': [],
+                'script_content': None,
+                'script_path': None,
+                'execute_command': None,
+                'target_servers': None,
+                'last_run_at': None,
+                'last_status': None,
+                'last_output': None,
+                'created_by': None,
+                'creator_name': '系统'
+            },
+            {
+                'id': -2,
+                'name': '域名到期自动通知',
+                'task_type': 'builtin',
+                'description': '每天定时检查域名到期日期，即将过期时通过企业微信发送告警通知',
+                'cron_expression': domain_cron,
+                'is_active': scheduler.get_job('builtin_domain_notify') is not None if scheduler.running else True,
+                'is_builtin': True,
+                'script_files': [],
+                'script_content': None,
+                'script_path': None,
+                'execute_command': None,
+                'target_servers': None,
+                'last_run_at': None,
+                'last_status': None,
+                'last_output': None,
+                'created_by': None,
+                'creator_name': '系统'
+            },
+            {
+                'id': -3,
+                'name': '服务器密码定期轮换',
+                'task_type': 'builtin',
+                'description': '每天定时检查启用了密码定期更新的服务器，按周期自动轮换登录密码',
+                'cron_expression': pw_cron,
+                'is_active': scheduler.get_job('builtin_password_rotation') is not None if scheduler.running else True,
+                'is_builtin': True,
+                'script_files': [],
+                'script_content': None,
+                'script_path': None,
+                'execute_command': None,
+                'target_servers': None,
+                'last_run_at': None,
+                'last_status': None,
+                'last_output': None,
+                'created_by': None,
+                'creator_name': '系统'
+            }
+        ]
+        tasks.extend(builtin_tasks)
         
         return jsonify({
             'code': 200,

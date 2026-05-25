@@ -27,3 +27,7 @@ export function updateServer(id: number | string, data: Record<string, any>) {
 export function deleteServer(id: number | string) {
   return request.delete(`/servers/${id}`)
 }
+
+export function triggerPasswordRotation(id: number | string) {
+  return request.post(`/servers/${id}/rotate-password`)
+}

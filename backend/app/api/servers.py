@@ -7,6 +7,8 @@ from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.validators import validate_ip, validate_hostname, validate_string_length
 from ..utils.password_utils import encrypt_data, decrypt_data
+from ..utils.scheduler import get_scheduler_db_config
+from ..utils.password_rotator import rotate_server_password
 from .users import get_user_allowed_envs
 
 servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
@@ -115,9 +117,9 @@ def get_servers():
                     server['os_password'] = decrypt_data(server['os_password'])
                 except:
                     pass  # 解密失败保持原值
-            if server.get('docker_password'):
+            if server.get('regular_password'):
                 try:
-                    server['docker_password'] = decrypt_data(server['docker_password'])
+                    server['regular_password'] = decrypt_data(server['regular_password'])
                 except:
                     pass  # 解密失败保持原值
 
@@ -189,9 +191,9 @@ def get_server_detail(server_id):
                 server['os_password'] = decrypt_data(server['os_password'])
             except:
                 pass  # 解密失败保持原值
-        if server.get('docker_password'):
+        if server.get('regular_password'):
             try:
-                server['docker_password'] = decrypt_data(server['docker_password'])
+                server['regular_password'] = decrypt_data(server['regular_password'])
             except:
                 pass  # 解密失败保持原值
 
@@ -359,16 +361,16 @@ def create_server():
                 'message': '系统密码长度不能超过255个字符'
             }), 400
         
-        if data.get('docker_user') and not validate_string_length(data.get('docker_user'), max_len=100):
+        if data.get('regular_user') and not validate_string_length(data.get('regular_user'), max_len=100):
             return jsonify({
                 'code': 400,
-                'message': 'Docker用户名长度不能超过100个字符'
+                'message': '普通用户名长度不能超过100个字符'
             }), 400
         
-        if data.get('docker_password') and not validate_string_length(data.get('docker_password'), max_len=255):
+        if data.get('regular_password') and not validate_string_length(data.get('regular_password'), max_len=255):
             return jsonify({
                 'code': 400,
-                'message': 'Docker密码长度不能超过255个字符'
+                'message': '普通用户密码长度不能超过255个字符'
             }), 400
         
         # 验证证书路径
@@ -385,19 +387,41 @@ def create_server():
                     'message': '证书路径必须以/开头'
                 }), 400
         
+        # 验证密码更新周期
+        rotation_days = data.get('password_rotation_days')
+        if rotation_days is not None:
+            try:
+                rotation_days = int(rotation_days)
+                if rotation_days < 1 or rotation_days > 365:
+                    return jsonify({
+                        'code': 400,
+                        'message': '密码更新周期必须在1-365天之间'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'code': 400,
+                    'message': '密码更新周期必须为有效数字'
+                }), 400
+        
         # 加密敏感信息（密码）
         os_password_encrypted = encrypt_data(data.get('os_password')) if data.get('os_password') else None
-        docker_password_encrypted = encrypt_data(data.get('docker_password')) if data.get('docker_password') else None
+        regular_password_encrypted = encrypt_data(data.get('regular_password')) if data.get('regular_password') else None
+        
+        rotation_enabled = 1 if data.get('password_rotation_enabled') else 0
+        rotation_days_val = rotation_days if rotation_days else 30
         
         cursor.execute(
             "INSERT INTO servers (env_type, platform, hostname, inner_ip, mapped_ip, public_ip, "
-            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, docker_user, docker_password, remark, cert_path) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "cpu, memory, sys_disk, data_disk, purpose, os_user, os_password, regular_user, regular_password, "
+            "remark, cert_path, password_rotation_enabled, password_rotation_days) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (data.get('env_type'), data.get('platform'), hostname,
              inner_ip, mapped_ip, public_ip,
              data.get('cpu'), data.get('memory'), data.get('sys_disk'),
              data.get('data_disk'), data.get('purpose'), data.get('os_user'),
-             os_password_encrypted, data.get('docker_user', 'docker'), docker_password_encrypted, data.get('remark'), cert_path)
+             os_password_encrypted, data.get('regular_user', 'docker'), regular_password_encrypted,
+             data.get('remark'), cert_path,
+             rotation_enabled, rotation_days_val)
         )
         db.commit()
         server_id = cursor.lastrowid
@@ -457,7 +481,8 @@ def update_server(server_id):
         # 允许的字段白名单，防止SQL注入
         allowed_fields = ['env_type', 'platform', 'hostname', 'inner_ip', 'mapped_ip', 'public_ip',
                          'cpu', 'memory', 'sys_disk', 'data_disk', 'purpose', 'os_user',
-                         'os_password', 'docker_user', 'docker_password', 'remark', 'cert_path']
+                         'os_password', 'regular_user', 'regular_password', 'remark', 'cert_path',
+                         'password_rotation_enabled', 'password_rotation_days']
         
         # 输入验证
         if 'hostname' in data:
@@ -546,16 +571,16 @@ def update_server(server_id):
                 'message': '系统密码长度不能超过255个字符'
             }), 400
         
-        if 'docker_user' in data and data['docker_user'] and not validate_string_length(data['docker_user'], max_len=100):
+        if 'regular_user' in data and data['regular_user'] and not validate_string_length(data['regular_user'], max_len=100):
             return jsonify({
                 'code': 400,
-                'message': 'Docker用户名长度不能超过100个字符'
+                'message': '普通用户名长度不能超过100个字符'
             }), 400
         
-        if 'docker_password' in data and data['docker_password'] and not validate_string_length(data['docker_password'], max_len=255):
+        if 'regular_password' in data and data['regular_password'] and not validate_string_length(data['regular_password'], max_len=255):
             return jsonify({
                 'code': 400,
-                'message': 'Docker密码长度不能超过255个字符'
+                'message': '普通用户密码长度不能超过255个字符'
             }), 400
         
         # 验证证书路径
@@ -571,11 +596,26 @@ def update_server(server_id):
                     'message': '证书路径必须以/开头'
                 }), 400
         
+        # 验证密码更新周期
+        if 'password_rotation_days' in data and data['password_rotation_days'] is not None:
+            try:
+                days = int(data['password_rotation_days'])
+                if days < 1 or days > 365:
+                    return jsonify({
+                        'code': 400,
+                        'message': '密码更新周期必须在1-365天之间'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'code': 400,
+                    'message': '密码更新周期必须为有效数字'
+                }), 400
+        
         # 处理密码字段加密
         if 'os_password' in data and data['os_password']:
             data['os_password'] = encrypt_data(data['os_password'])
-        if 'docker_password' in data and data['docker_password']:
-            data['docker_password'] = encrypt_data(data['docker_password'])
+        if 'regular_password' in data and data['regular_password']:
+            data['regular_password'] = encrypt_data(data['regular_password'])
         
         for key in data:
             if key in allowed_fields:
@@ -618,6 +658,53 @@ def update_server(server_id):
         }), 500
     finally:
         cursor.close()
+
+@servers_bp.route('/<int:server_id>/rotate-password', methods=['POST'])
+@jwt_required
+@module_required('servers')
+@role_required(['admin', 'operator'])
+def rotate_password(server_id):
+    """
+    手动触发服务器密码轮换
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT * FROM servers WHERE id = %s", (server_id,))
+        server = cursor.fetchone()
+        if not server:
+            return jsonify({'code': 404, 'message': '服务器不存在'}), 404
+
+        # 检查是否已在执行中
+        if server.get('password_rotation_status') == 'running':
+            return jsonify({'code': 409, 'message': '该服务器正在执行密码轮换中，请稍后重试'}), 409
+
+        # 获取数据库配置
+        db_config = get_scheduler_db_config()
+        if not db_config:
+            return jsonify({'code': 500, 'message': '调度器未初始化，无法获取数据库配置'}), 500
+
+        # 异步执行密码轮换（在新线程中）
+        import threading
+        def run():
+            result = rotate_server_password(server, db_config)
+            logger = __import__('logging').getLogger(__name__)
+            logger.info("服务器 %s 密码轮换结果: %s", server.get('hostname'), result.get('message'))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+        # 记录操作日志
+        log_operation(module='服务器管理', action='rotate_password', target_id=server_id,
+                     target_name=server.get('hostname'), detail={'action': '手动触发密码轮换'})
+
+        return jsonify({
+            'code': 200,
+            'message': '密码轮换任务已提交，正在后台执行'
+        })
+    finally:
+        cursor.close()
+
 
 @servers_bp.route('/<int:server_id>', methods=['DELETE'])
 @jwt_required

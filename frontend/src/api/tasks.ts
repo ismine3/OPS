@@ -31,3 +31,11 @@ export function runTask(id: number | string) {
 export function getTaskLogs(id: number | string, params: Record<string, any>) {
   return request.get(`/tasks/${id}/logs`, { params })
 }
+
+export function getSystemConfig() {
+  return request.get('/system-config')
+}
+
+export function updateSystemConfig(data: Record<string, any>) {
+  return request.put('/system-config', data)
+}

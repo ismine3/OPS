@@ -25,7 +25,12 @@
     <!-- 数据表格 -->
     <el-card class="table-card">
       <el-table :data="tableData" stripe v-loading="loading" style="width: 100%">
-        <el-table-column prop="name" label="任务名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="任务名称" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.is_builtin" type="warning" size="small" style="margin-left: 6px;">系统内置</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
         <el-table-column prop="cron_expression" label="Cron表达式" min-width="130">
           <template #default="{ row }">
@@ -57,7 +62,12 @@
         </el-table-column>
         <el-table-column prop="is_active" label="状态" min-width="80">
           <template #default="{ row }">
-            <el-switch v-model="row.is_active" @change="handleToggle(row)" />
+            <template v-if="row.is_builtin">
+              <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+                {{ row.is_active ? '运行中' : '已停止' }}
+              </el-tag>
+            </template>
+            <el-switch v-else v-model="row.is_active" @change="handleToggle(row)" />
           </template>
         </el-table-column>
         <el-table-column prop="last_run" label="上次执行" min-width="160" />
@@ -72,10 +82,16 @@
         <el-table-column prop="created_by" label="创建者" min-width="100" />
         <el-table-column label="操作" min-width="280" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleRun(row)">手动执行</el-button>
-            <el-button type="info" size="small" @click="handleViewLogs(row)">查看日志</el-button>
-            <el-button type="warning" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <template v-if="row.is_builtin">
+              <el-button v-if="isAdmin" type="success" size="small" @click="handleBuiltinConfig(row)">配置</el-button>
+              <el-tag v-else type="info" size="small">仅展示</el-tag>
+            </template>
+            <template v-else>
+              <el-button type="primary" size="small" @click="handleRun(row)">手动执行</el-button>
+              <el-button type="info" size="small" @click="handleViewLogs(row)">查看日志</el-button>
+              <el-button type="warning" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -149,6 +165,37 @@
       </template>
     </el-dialog>
 
+    <!-- 内置任务配置弹窗（仅管理员） -->
+    <el-dialog v-model="builtinDialogVisible" :title="builtinDialogTitle" width="500px" destroy-on-close>
+      <el-form ref="builtinFormRef" :model="builtinForm" :rules="builtinRules" label-width="120px">
+        <el-form-item label="Cron表达式" prop="cron_expression">
+          <el-input v-model="builtinForm.cron_expression" placeholder="例如: 0 8 * * *">
+            <template #append>
+              <el-tooltip content="格式: 分 时 日 月 周" placement="top">
+                <el-icon><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </template>
+          </el-input>
+          <el-text type="info" size="small">格式: 分 时 日 月 周，修改后立即生效</el-text>
+        </el-form-item>
+        <el-form-item v-if="currentBuiltinId !== -3" label="预警天数" prop="warning_days">
+          <el-input-number 
+            v-model="builtinForm.warning_days" 
+            :min="1" :max="365" 
+            :step="1" 
+            step-strictly
+          />
+          <el-text type="info" size="small" style="margin-left: 8px;">
+            {{ currentBuiltinId === -1 ? '距证书到期≤该天数时发送告警' : '距域名到期≤该天数时发送告警' }}
+          </el-text>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="builtinDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleBuiltinSubmit" :loading="builtinSubmitLoading">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 查看日志抽屉 -->
     <el-drawer v-model="logDrawerVisible" :title="`执行日志 - ${currentTaskName}`" size="700px">
       <el-table :data="logData" stripe v-loading="logLoading" style="width: 100%">
@@ -186,7 +233,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled } from '@element-plus/icons-vue'
-import { getTasks, createTask, updateTask, deleteTask, toggleTask, runTask, getTaskLogs } from '../api/tasks'
+import { getTasks, createTask, updateTask, deleteTask, toggleTask, runTask, getTaskLogs, getSystemConfig, updateSystemConfig } from '../api/tasks'
+import { useUserStore } from '../stores/user'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
 import { safeText, maxLength, cronValidator, isSafeSearch } from '@/utils/validators'
 
@@ -198,12 +246,12 @@ const dialogVisible = ref(false)
 const logDrawerVisible = ref(false)
 const detailDialogVisible = ref(false)
 const dialogTitle = ref('新增任务')
-const editingId = ref(null)
+const editingId = ref<number | null>(null)
 /** @type {any} */
-const formRef = ref(null)
+const formRef = ref<any>(null)
 /** @type {any} */
-const uploadRef = ref(null)
-const currentTaskId = ref(null)
+const uploadRef = ref<any>(null)
+const currentTaskId = ref<number | null>(null)
 const currentTaskName = ref('')
 const logData = ref([])
 const detailTitle = ref('')
@@ -212,6 +260,27 @@ const detailContent = ref('')
 const searchParams = reactive({
   search: ''
 })
+
+const userStore = useUserStore()
+const isAdmin = userStore.isAdmin
+
+// 内置任务配置弹窗
+const builtinDialogVisible = ref(false)
+const builtinDialogTitle = ref('')
+const builtinSubmitLoading = ref(false)
+const currentBuiltinId = ref(0)
+/** @type {any} */
+const builtinFormRef = ref<any>(null)
+const builtinForm = reactive({
+  cron_expression: '',
+  warning_days: 30
+})
+const builtinRules = {
+  cron_expression: [
+    { required: true, message: '请输入Cron表达式', trigger: 'blur' },
+    { validator: cronValidator, trigger: 'blur' }
+  ]
+}
 
 const form = reactive({
   name: '',
@@ -250,6 +319,8 @@ async function fetchData() {
   try {
     const res = await getTasks(searchParams)
     tableData.value = res.data || []
+  } catch {
+    ElMessage.error('获取任务列表失败')
   } finally {
     loading.value = false
   }
@@ -293,7 +364,7 @@ function handleAdd() {
 /**
  * @param {any} row
  */
-function handleEdit(row) {
+function handleEdit(row: any) {
   dialogTitle.value = '编辑任务'
   editingId.value = row.id
   form.name = row.name
@@ -314,7 +385,7 @@ function handleEdit(row) {
  * @param {any} file
  * @param {any} fileListParam
  */
-function handleFileChange(file, fileListParam) {
+function handleFileChange(_file: any, fileListParam: any) {
   form.scriptFiles = fileListParam.map((f: any) => f.raw).filter(Boolean)
 }
 
@@ -322,7 +393,7 @@ function handleFileChange(file, fileListParam) {
  * @param {any} file
  * @param {any} fileListParam
  */
-function handleFileRemove(file, fileListParam) {
+function handleFileRemove(_file: any, fileListParam: any) {
   form.scriptFiles = fileListParam.map((f: any) => f.raw).filter(Boolean)
 }
 
@@ -330,7 +401,7 @@ function handleFileRemove(file, fileListParam) {
  * 删除已有文件
  * @param {string} fileName
  */
-function handleRemoveExistingFile(fileName) {
+function handleRemoveExistingFile(fileName: string) {
   const index = form.existingFiles.indexOf(fileName)
   if (index > -1) {
     form.existingFiles.splice(index, 1)
@@ -392,7 +463,7 @@ async function handleSubmit() {
 /**
  * @param {any} row
  */
-async function handleToggle(row) {
+async function handleToggle(row: any) {
   try {
     await toggleTask(row.id)
     ElMessage.success(row.is_active ? '任务已启用' : '任务已禁用')
@@ -405,7 +476,7 @@ async function handleToggle(row) {
 /**
  * @param {any} row
  */
-async function handleRun(row) {
+async function handleRun(row: any) {
   try {
     await runTask(row.id)
     ElMessage.success('任务已开始执行')
@@ -417,7 +488,7 @@ async function handleRun(row) {
 /**
  * @param {any} row
  */
-async function handleViewLogs(row) {
+async function handleViewLogs(row: any) {
   currentTaskId.value = row.id
   currentTaskName.value = row.name
   logDrawerVisible.value = true
@@ -427,7 +498,7 @@ async function handleViewLogs(row) {
 async function fetchLogs() {
   logLoading.value = true
   try {
-    const res = await getTaskLogs(currentTaskId.value, {})
+    const res = await getTaskLogs(currentTaskId.value!, {})
     logData.value = res.data || []
   } finally {
     logLoading.value = false
@@ -438,7 +509,7 @@ async function fetchLogs() {
  * @param {any} content
  * @param {any} type
  */
-function showDetail(content, type) {
+function showDetail(content: any, type: any) {
   detailTitle.value = type
   detailContent.value = content
   detailDialogVisible.value = true
@@ -447,7 +518,7 @@ function showDetail(content, type) {
 /**
  * @param {any} row
  */
-function handleDelete(row) {
+function handleDelete(row: any) {
   ElMessageBox.confirm(`确定要删除任务 "${row.name}" 吗？`, '提示', {
     type: 'warning',
     confirmButtonText: '确定',
@@ -460,11 +531,75 @@ function handleDelete(row) {
 }
 
 /**
+ * 打开内置任务配置弹窗
+ * @param {any} row
+ */
+async function handleBuiltinConfig(row: any) {
+  currentBuiltinId.value = row.id
+  builtinDialogTitle.value = `配置 - ${row.name}`
+
+  try {
+    const res = await getSystemConfig()
+    const config = res.data || {}
+
+    if (row.id === -1) {
+      builtinForm.cron_expression = config.cert_auto_check_cron?.value || '0 8 * * *'
+      builtinForm.warning_days = parseInt(config.ssl_warning_days?.value || '30')
+    } else if (row.id === -2) {
+      builtinForm.cron_expression = config.domain_auto_notify_cron?.value || '0 8 * * *'
+      builtinForm.warning_days = parseInt(config.domain_warning_days?.value || '30')
+    } else if (row.id === -3) {
+      builtinForm.cron_expression = config.password_rotation_cron?.value || '0 3 * * *'
+      builtinForm.warning_days = 30
+    }
+  } catch {
+    if (row.id === -1) {
+      builtinForm.cron_expression = '0 8 * * *'
+      builtinForm.warning_days = 30
+    } else if (row.id === -2) {
+      builtinForm.cron_expression = '0 8 * * *'
+      builtinForm.warning_days = 30
+    } else {
+      builtinForm.cron_expression = '0 3 * * *'
+    }
+  }
+
+  builtinDialogVisible.value = true
+}
+
+async function handleBuiltinSubmit() {
+  const valid = await builtinFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  builtinSubmitLoading.value = true
+  try {
+    const payload: Record<string, any> = {}
+
+    if (currentBuiltinId.value === -1) {
+      payload.cert_auto_check_cron = builtinForm.cron_expression
+      payload.ssl_warning_days = String(builtinForm.warning_days)
+    } else if (currentBuiltinId.value === -2) {
+      payload.domain_auto_notify_cron = builtinForm.cron_expression
+      payload.domain_warning_days = String(builtinForm.warning_days)
+    } else if (currentBuiltinId.value === -3) {
+      payload.password_rotation_cron = builtinForm.cron_expression
+    }
+
+    await updateSystemConfig(payload)
+    ElMessage.success('配置更新成功')
+    builtinDialogVisible.value = false
+    fetchData()
+  } finally {
+    builtinSubmitLoading.value = false
+  }
+}
+
+/**
  * @param {any} status
  */
-function getStatusTagType(status) {
+function getStatusTagType(status: string) {
   /** @type {Record<string, string>} */
-  const map = {
+  const map: Record<string, string> = {
     'success': 'success',
     'failed': 'danger',
     'running': 'primary'
@@ -475,9 +610,9 @@ function getStatusTagType(status) {
 /**
  * @param {any} status
  */
-function getStatusText(status) {
+function getStatusText(status: string) {
   /** @type {Record<string, string>} */
-  const map = {
+  const map: Record<string, string> = {
     'success': '成功',
     'failed': '失败',
     'running': '运行中'

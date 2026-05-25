@@ -1401,7 +1401,7 @@ def deploy_cert(cert_id):
 
         # 根据 ssh_user_type 选择用户名和密码
         if ssh_user_type == 'regular':
-            ssh_username = server.get('regular_user') or 'docker'
+            ssh_username = server.get('regular_user') or ''
             ssh_password_encrypted = server.get('regular_password')
             if not ssh_password_encrypted:
                 return jsonify({'code': 400, 'message': '该服务器未配置普通用户密码'}), 400

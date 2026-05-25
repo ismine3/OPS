@@ -41,7 +41,8 @@ def get_system_config():
 
         return jsonify({'code': 200, 'data': result})
     except Exception as e:
-        return jsonify({'code': 500, 'message': f'获取系统配置失败: {str(e)}'}), 500
+        logger.error("获取系统配置失败: %s", e, exc_info=True)
+        return jsonify({'code': 500, 'message': '获取系统配置失败，请稍后重试'}), 500
     finally:
         cursor.close()
 
@@ -113,6 +114,7 @@ def update_system_config():
         })
     except Exception as e:
         db.rollback()
-        return jsonify({'code': 500, 'message': f'更新系统配置失败: {str(e)}'}), 500
+        logger.error("更新系统配置失败: %s", e, exc_info=True)
+        return jsonify({'code': 500, 'message': '更新系统配置失败，请稍后重试'}), 500
     finally:
         cursor.close()

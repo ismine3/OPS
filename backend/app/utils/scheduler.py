@@ -178,6 +178,30 @@ def execute_script(task_id, script_path, db_config, execute_command=None, task_d
     thread.start()
 
 
+def _create_cron_trigger(cron_expression):
+    """
+    解析 5 段 Cron 表达式并创建 CronTrigger
+    
+    Args:
+        cron_expression: "分 时 日 月 周" 格式的 Cron 表达式
+    Returns:
+        CronTrigger 实例
+    Raises:
+        ValueError: Cron 表达式格式错误
+    """
+    parts = cron_expression.split()
+    if len(parts) != 5:
+        raise ValueError("Cron 表达式格式错误，需要5个字段：分 时 日 月 周")
+    minute, hour, day, month, day_of_week = parts
+    return CronTrigger(
+        minute=minute,
+        hour=hour,
+        day=day,
+        month=month,
+        day_of_week=day_of_week
+    )
+
+
 def add_task_to_scheduler(task_id, script_path, cron_expression, db_config, execute_command=None, task_dir=None):
     """
     添加任务到调度器
@@ -193,20 +217,7 @@ def add_task_to_scheduler(task_id, script_path, cron_expression, db_config, exec
     """
     try:
         # 解析 cron 表达式
-        parts = cron_expression.split()
-        if len(parts) != 5:
-            raise ValueError("Cron 表达式格式错误，需要5个字段：分 时 日 月 周")
-        
-        minute, hour, day, month, day_of_week = parts
-        
-        # 创建 CronTrigger
-        trigger = CronTrigger(
-            minute=minute,
-            hour=hour,
-            day=day,
-            month=month,
-            day_of_week=day_of_week
-        )
+        trigger = _create_cron_trigger(cron_expression)
         
         # 移除已存在的任务
         job_id = f'task_{task_id}'
@@ -334,87 +345,60 @@ def init_scheduler(app):
         # 注册内置定时任务：SSL证书自动检测+通知
         cert_cron = cert_cron_from_db or app.config.get('CERT_AUTO_CHECK_CRON', '0 8 * * *')
         try:
-            parts = cert_cron.split()
-            if len(parts) == 5:
-                minute, hour, day, month, day_of_week = parts
-                cert_trigger = CronTrigger(
-                    minute=minute,
-                    hour=hour,
-                    day=day,
-                    month=month,
-                    day_of_week=day_of_week
-                )
-                
-                # 移除已存在的任务
-                if scheduler.get_job('builtin_cert_check_notify'):
-                    scheduler.remove_job('builtin_cert_check_notify')
-                
-                scheduler.add_job(
-                    func=auto_cert_check_and_notify,
-                    trigger=cert_trigger,
-                    id='builtin_cert_check_notify',
-                    args=[db_config, app_config],
-                    replace_existing=True
-                )
-                logger.info("已注册内置任务: SSL证书自动检测+通知 (cron: %s)", cert_cron)
+            cert_trigger = _create_cron_trigger(cert_cron)
+            
+            # 移除已存在的任务
+            if scheduler.get_job('builtin_cert_check_notify'):
+                scheduler.remove_job('builtin_cert_check_notify')
+            
+            scheduler.add_job(
+                func=auto_cert_check_and_notify,
+                trigger=cert_trigger,
+                id='builtin_cert_check_notify',
+                args=[db_config, app_config],
+                replace_existing=True
+            )
+            logger.info("已注册内置任务: SSL证书自动检测+通知 (cron: %s)", cert_cron)
         except Exception as e:
             logger.exception("注册SSL证书自动检测任务失败: %s", e)
         
         # 注册内置定时任务：域名到期自动通知
         domain_cron = domain_cron_from_db or app.config.get('DOMAIN_AUTO_NOTIFY_CRON', '0 8 * * *')
         try:
-            parts = domain_cron.split()
-            if len(parts) == 5:
-                minute, hour, day, month, day_of_week = parts
-                domain_trigger = CronTrigger(
-                    minute=minute,
-                    hour=hour,
-                    day=day,
-                    month=month,
-                    day_of_week=day_of_week
-                )
-                
-                # 移除已存在的任务
-                if scheduler.get_job('builtin_domain_notify'):
-                    scheduler.remove_job('builtin_domain_notify')
-                
-                scheduler.add_job(
-                    func=auto_domain_notify,
-                    trigger=domain_trigger,
-                    id='builtin_domain_notify',
-                    args=[db_config, app_config],
-                    replace_existing=True
-                )
-                logger.info("已注册内置任务: 域名到期自动通知 (cron: %s)", domain_cron)
+            domain_trigger = _create_cron_trigger(domain_cron)
+            
+            # 移除已存在的任务
+            if scheduler.get_job('builtin_domain_notify'):
+                scheduler.remove_job('builtin_domain_notify')
+            
+            scheduler.add_job(
+                func=auto_domain_notify,
+                trigger=domain_trigger,
+                id='builtin_domain_notify',
+                args=[db_config, app_config],
+                replace_existing=True
+            )
+            logger.info("已注册内置任务: 域名到期自动通知 (cron: %s)", domain_cron)
         except Exception as e:
             logger.exception("注册域名到期自动通知任务失败: %s", e)
         
         # 注册内置定时任务：服务器密码定期轮换
         password_rotation_cron = pw_cron_from_db or app.config.get('PASSWORD_ROTATION_CHECK_CRON', '0 3 * * *')
         try:
-            parts = password_rotation_cron.split()
-            if len(parts) == 5:
-                minute, hour, day, month, day_of_week = parts
-                pr_trigger = CronTrigger(
-                    minute=minute,
-                    hour=hour,
-                    day=day,
-                    month=month,
-                    day_of_week=day_of_week
-                )
-                
-                # 移除已存在的任务
-                if scheduler.get_job('builtin_password_rotation'):
-                    scheduler.remove_job('builtin_password_rotation')
-                
-                scheduler.add_job(
-                    func=auto_password_rotation,
-                    trigger=pr_trigger,
-                    id='builtin_password_rotation',
-                    args=[db_config, app_config],
-                    replace_existing=True
-                )
-                logger.info("已注册内置任务: 服务器密码定期轮换 (cron: %s)", password_rotation_cron)
+            pr_trigger = _create_cron_trigger(password_rotation_cron)
+            
+            # 移除已存在的任务
+            if scheduler.get_job('builtin_password_rotation'):
+                scheduler.remove_job('builtin_password_rotation')
+            
+            scheduler.add_job(
+                func=auto_password_rotation,
+                trigger=pr_trigger,
+                id='builtin_password_rotation',
+                args=[db_config, app_config],
+                replace_existing=True
+            )
+            logger.info("已注册内置任务: 服务器密码定期轮换 (cron: %s)", password_rotation_cron)
         except Exception as e:
             logger.exception("注册服务器密码定期轮换任务失败: %s", e)
         
@@ -452,19 +436,7 @@ def reschedule_builtin_job(job_id, cron_expression):
         bool: 是否成功
     """
     try:
-        parts = cron_expression.split()
-        if len(parts) != 5:
-            logger.error("Cron 表达式格式错误: %s", cron_expression)
-            return False
-
-        minute, hour, day, month, day_of_week = parts
-        trigger = CronTrigger(
-            minute=minute,
-            hour=hour,
-            day=day,
-            month=month,
-            day_of_week=day_of_week
-        )
+        trigger = _create_cron_trigger(cron_expression)
 
         scheduler.reschedule_job(job_id, trigger=trigger)
         logger.info("已重调度内置任务 %s, cron=%s", job_id, cron_expression)
@@ -747,7 +719,8 @@ def auto_password_rotation(db_config, app_config):
             
             # 执行密码轮换
             logger.info("服务器 %s: 开始执行密码轮换...", hostname)
-            result = rotate_server_password(server, db_config)
+            password_length = int(app_config.get('password_rotation_length', 16))
+            result = rotate_server_password(server, db_config, password_length)
             
             if result.get('success'):
                 rotated_count += 1

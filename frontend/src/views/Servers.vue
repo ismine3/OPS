@@ -246,7 +246,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getServers, createServer, updateServer, deleteServer, triggerPasswordRotation } from '../api/servers'
+import { getServers, createServer, updateServer, deleteServer } from '../api/servers'
 import { getEnvTypes, getPlatforms } from '../api/dicts'
 import { getProjectOptions } from '../api/projects'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
@@ -551,26 +551,6 @@ function getRotationStatusText(status: string) {
     'failed': '失败'
   }
   return map[status] || status || '未知'
-}
-
-function handleRotatePassword(row: any) {
-  ElMessageBox.confirm(
-    `确定要立即更新服务器 "${row.hostname}" 的登录密码吗？更新过程中请勿进行其他操作。`,
-    '确认密码更新',
-    {
-      type: 'warning',
-      confirmButtonText: '确定更新',
-      cancelButtonText: '取消'
-    }
-  ).then(async () => {
-    try {
-      await triggerPasswordRotation(row.id)
-      ElMessage.success('密码更新任务已提交，请稍后刷新查看结果')
-      fetchData()
-    } catch (e: any) {
-      ElMessage.error(e?.response?.data?.message || '触发密码更新失败')
-    }
-  }).catch(() => {})
 }
 </script>
 

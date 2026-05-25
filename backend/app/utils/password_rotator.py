@@ -26,6 +26,25 @@ from .password_utils import encrypt_data, decrypt_data
 logger = logging.getLogger(__name__)
 
 
+def _create_ssh_client():
+    """
+    创建安全配置的 paramiko SSHClient
+    - 使用 RejectPolicy 拒绝未知主机密钥（防中间人攻击）
+    - 加载系统 known_hosts 文件
+    - 如果 known_hosts 不可用，记录警告并使用 WarningPolicy（仅记录警告，仍允许连接）
+    """
+    import os
+    client = paramiko.SSHClient()
+    known_hosts_path = os.path.expanduser('~/.ssh/known_hosts')
+    if os.path.exists(known_hosts_path):
+        client.load_host_keys(known_hosts_path)
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        logger.warning("未找到 known_hosts 文件(%s)，使用 WarningPolicy 作为降级策略", known_hosts_path)
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
+    return client
+
+
 def generate_random_password(length=16):
     """
     生成强随机密码：包含大小写字母、数字和特殊字符
@@ -72,8 +91,7 @@ def test_ssh_connection(host, user, password, port=22, timeout=10):
     Returns:
         (success: bool, message: str)
     """
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client = _create_ssh_client()
     try:
         client.connect(
             hostname=host,
@@ -123,20 +141,21 @@ def _change_own_password(ssh_client, old_password, new_password):
     if not current_user:
         return False, '无法获取当前用户名'
 
-    # 方式1: 尝试通过 sudo chpasswd 修改（最可靠）
+    # 方式1: 尝试通过 sudo chpasswd 修改（最可靠，使用 stdin 避免 shell 注入）
     try:
-        escaped_new = new_password.replace("'", "'\\''")
-        cmd = f"echo '{current_user}:{escaped_new}' | sudo chpasswd 2>&1"
-        stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=30)
+        stdin, stdout, stderr = ssh_client.exec_command('sudo chpasswd 2>&1', timeout=30)
+        stdin.write(f'{current_user}:{new_password}\n')
+        stdin.channel.shutdown_write()
         exit_code = stdout.channel.recv_exit_status()
         
         if exit_code == 0:
             return True, f'{current_user}密码修改成功(sudo chpasswd)'
         
         # sudo 失败，尝试直接 chpasswd（如果已经是 root）
-        cmd2 = f"echo '{current_user}:{escaped_new}' | chpasswd 2>&1"
-        stdin, stdout, stderr = ssh_client.exec_command(cmd2, timeout=30)
-        exit_code2 = stdout.channel.recv_exit_status()
+        stdin2, stdout2, stderr2 = ssh_client.exec_command('chpasswd 2>&1', timeout=30)
+        stdin2.write(f'{current_user}:{new_password}\n')
+        stdin2.channel.shutdown_write()
+        exit_code2 = stdout2.channel.recv_exit_status()
         
         if exit_code2 == 0:
             return True, f'{current_user}密码修改成功(chpasswd)'
@@ -246,7 +265,7 @@ def _change_password_interactive(ssh_client, old_password, new_password, usernam
                 pass
 
 
-def rotate_server_password(server, db_config):
+def rotate_server_password(server, db_config, password_length=16):
     """
     对单台服务器执行密码轮换，包含完整的安全保障流程
     
@@ -258,6 +277,7 @@ def rotate_server_password(server, db_config):
     Args:
         server: 服务器记录字典
         db_config: 数据库配置字典
+        password_length: 生成密码的长度（默认16位）
     
     Returns:
         dict: {'success': bool, 'message': str}
@@ -300,21 +320,22 @@ def rotate_server_password(server, db_config):
             # 场景2: 两者都有 → 普通用户登录 → su切换root → 统一更新
             result = _rotate_both_via_su(
                 cursor, conn, server_id, hostname, target_ip,
-                regular_user, regular_pw_enc, os_user, os_pw_enc
+                regular_user, regular_pw_enc, os_user, os_pw_enc,
+                password_length
             )
         elif has_regular:
             # 场景1: 只有普通用户
             result = _rotate_one_password(
                 cursor, conn, server_id, hostname, target_ip,
                 regular_user, regular_pw_enc, 'regular_password',
-                f'普通用户 {regular_user}'
+                f'普通用户 {regular_user}', password_length
             )
         else:
             # 场景3: 只有root
             result = _rotate_one_password(
                 cursor, conn, server_id, hostname, target_ip,
                 os_user, os_pw_enc, 'os_password',
-                f'系统用户 {os_user}'
+                f'系统用户 {os_user}', password_length
             )
 
         # 最终状态
@@ -351,7 +372,8 @@ def rotate_server_password(server, db_config):
 
 
 def _rotate_both_via_su(cursor, conn, server_id, hostname, target_ip,
-                        regular_user, regular_pw_enc, os_user, os_pw_enc):
+                        regular_user, regular_pw_enc, os_user, os_pw_enc,
+                        password_length=16):
     """
     场景2: 两者都有
     SSH登录普通用户 → su切换到root → 以root身份统一更新两个密码
@@ -374,15 +396,14 @@ def _rotate_both_via_su(cursor, conn, server_id, hostname, target_ip,
     if not regular_old or not os_old:
         return {'success': False, 'message': '旧密码为空'}
 
-    regular_new = generate_random_password()
-    os_new = generate_random_password()
+    regular_new = generate_random_password(password_length)
+    os_new = generate_random_password(password_length)
 
     logger.info("服务器 %s(%s): [双账户] 以 %s 登录 → su root → 统一更新所有密码",
                 hostname, target_ip, regular_user)
 
     # Step 2: SSH以普通用户登录
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh = _create_ssh_client()
     try:
         ssh.connect(
             hostname=target_ip, port=22, username=regular_user,
@@ -461,6 +482,12 @@ def _rotate_both_via_su(cursor, conn, server_id, hostname, target_ip,
 def _change_both_passwords_as_root(ssh_client, root_old_pw, regular_user, regular_new_pw, root_new_pw):
     """
     以当前SSH会话（普通用户）执行 su 切换到 root，然后以 root 身份修改两个账户密码
+    使用交互式 shell + stdin chpasswd 避免 shell 密码注入风险
+
+    流程:
+    1. invoke_shell → su - root → 提供root密码
+    2. 切换到root后执行 chpasswd，通过stdin写入密码对
+    3. 先改普通用户再改 root
     """
     channel = None
     try:
@@ -469,16 +496,11 @@ def _change_both_passwords_as_root(ssh_client, root_old_pw, regular_user, regula
         if channel.recv_ready():
             channel.recv(4096)
 
-        # su 到 root，执行 chpasswd 同时改两个密码
-        # 重要：先改普通用户再改 root，中间失败时 root 密码不变，仍可登录恢复
-        escaped_reg = regular_new_pw.replace("'", "'\\''")
-        escaped_root = root_new_pw.replace("'", "'\\''")
-        cmd = (f"su -c \"echo '{regular_user}:{escaped_reg}' | chpasswd "
-               f"&& echo 'root:{escaped_root}' | chpasswd\"\n")
-        channel.send(cmd)
+        # Step 1: su 切换到 root
+        channel.send('su - root\n')
         time.sleep(1)
 
-        # 收集 su 前的输出，检测密码提示
+        # 收集 su 的输出，检测密码提示
         output = b''
         for _ in range(5):
             if channel.recv_ready():
@@ -490,10 +512,32 @@ def _change_both_passwords_as_root(ssh_client, root_old_pw, regular_user, regula
         if 'Password:' in output_str or 'assword:' in output_str or '密码' in output_str:
             channel.send(root_old_pw + '\n')
             time.sleep(2)
-        else:
-            time.sleep(1.5)
 
-        # 收集执行结果
+        # 检查 su 是否成功
+        check_output = b''
+        for _ in range(6):
+            if channel.recv_ready():
+                check_output += channel.recv(4096)
+            time.sleep(0.3)
+        check_str = check_output.decode('utf-8', errors='ignore')
+
+        if 'su: Authentication failure' in check_str or 'su: 鉴定故障' in check_str:
+            return False, f'su认证失败(root密码错误): {check_str[:200]}'
+        if 'incorrect password' in check_str.lower():
+            return False, f'su密码错误: {check_str[:200]}'
+
+        # Step 2: 以 root 身份执行 chpasswd（通过 stdin 传递密码，避免 shell 注入）
+        # 重要：先改普通用户再改 root，中间失败时 root 密码不变，仍可登录恢复
+        channel.send('chpasswd\n')
+        time.sleep(0.5)
+        # 写入密码对到 chpasswd 的 stdin
+        channel.send(f'{regular_user}:{regular_new_pw}\n')
+        channel.send(f'root:{root_new_pw}\n')
+        # 发送 Ctrl+D (EOF) 结束 chpasswd 输入
+        channel.send('\x04')
+        time.sleep(1.5)
+
+        # 收集 chpasswd 执行结果
         result_output = b''
         for _ in range(8):
             if channel.recv_ready():
@@ -506,14 +550,11 @@ def _change_both_passwords_as_root(ssh_client, root_old_pw, regular_user, regula
             time.sleep(0.2)
         result_str = result_output.decode('utf-8', errors='ignore')
 
-        # 检查 su 认证失败
-        if 'su: Authentication failure' in result_str or 'su: 鉴定故障' in result_str:
-            return False, f'su认证失败(root密码错误): {result_str[:200]}'
-        if 'incorrect password' in result_str.lower():
-            return False, f'su密码错误: {result_str[:200]}'
         # 检查 chpasswd 报错
         if 'chpasswd:' in result_str and ('error' in result_str.lower() or 'failed' in result_str.lower()):
             return False, f'chpasswd执行失败: {result_str[:200]}'
+        if 'Authentication token manipulation error' in result_str:
+            return False, f'chpasswd认证令牌错误: {result_str[:200]}'
 
         return True, '通过su切换root统一修改密码完成'
     except Exception as e:
@@ -527,7 +568,8 @@ def _change_both_passwords_as_root(ssh_client, root_old_pw, regular_user, regula
 
 
 def _rotate_one_password(cursor, conn, server_id, hostname, target_ip,
-                         target_user, encrypted_password, update_field, mode_desc):
+                         target_user, encrypted_password, update_field, mode_desc,
+                         password_length=16):
     """
     轮换单个账户的密码（场景1和场景3）
     SSH以目标用户登录，修改自身密码
@@ -547,13 +589,12 @@ def _rotate_one_password(cursor, conn, server_id, hostname, target_ip,
         return {'success': False, 'message': f'{mode_desc}: 旧密码为空'}
 
     # Step 2: 生成新密码
-    new_password = generate_random_password()
+    new_password = generate_random_password(password_length)
 
     logger.info("服务器 %s(%s): [单账户] 以 %s 登录，修改自身密码", hostname, target_ip, target_user)
 
     # Step 3: SSH 连接并修改密码
-    ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client = _create_ssh_client()
 
     try:
         ssh_client.connect(
@@ -637,8 +678,7 @@ def _try_restore_password(target_ip, target_user, old_password):
     尝试恢复旧密码
     新密码验证失败时调用此函数，尽力恢复旧密码以保证服务器可访问
     """
-    ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client = _create_ssh_client()
 
     try:
         # 用新密码连接可能失败了，尝试用旧密码连接恢复

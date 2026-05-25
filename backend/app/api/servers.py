@@ -1,7 +1,8 @@
 """
 服务器管理 API
 """
-from flask import Blueprint, request, jsonify, g
+import logging
+from flask import Blueprint, request, jsonify, g, current_app
 from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
@@ -10,6 +11,8 @@ from ..utils.password_utils import encrypt_data, decrypt_data
 from ..utils.scheduler import get_scheduler_db_config
 from ..utils.password_rotator import rotate_server_password
 from .users import get_user_allowed_envs
+
+logger = logging.getLogger(__name__)
 
 servers_bp = Blueprint('servers', __name__, url_prefix='/api/servers')
 
@@ -419,7 +422,7 @@ def create_server():
              inner_ip, mapped_ip, public_ip,
              data.get('cpu'), data.get('memory'), data.get('sys_disk'),
              data.get('data_disk'), data.get('purpose'), data.get('os_user'),
-             os_password_encrypted, data.get('regular_user', 'docker'), regular_password_encrypted,
+             os_password_encrypted, data.get('regular_user', ''), regular_password_encrypted,
              data.get('remark'), cert_path,
              rotation_enabled, rotation_days_val)
         )
@@ -675,21 +678,40 @@ def rotate_password(server_id):
         if not server:
             return jsonify({'code': 404, 'message': '服务器不存在'}), 404
 
-        # 检查是否已在执行中
+        # 快速检查是否正在执行中（精确并发控制由 rotate_server_password 内部原子锁保证）
         if server.get('password_rotation_status') == 'running':
             return jsonify({'code': 409, 'message': '该服务器正在执行密码轮换中，请稍后重试'}), 409
 
-        # 获取数据库配置
+        # 获取数据库配置和密码长度配置
         db_config = get_scheduler_db_config()
         if not db_config:
             return jsonify({'code': 500, 'message': '调度器未初始化，无法获取数据库配置'}), 500
 
+        # 从系统配置读取密码长度（fallback 到16）
+        password_length = current_app.config.get('PASSWORD_ROTATION_LENGTH', 16)
+
         # 异步执行密码轮换（在新线程中）
         import threading
         def run():
-            result = rotate_server_password(server, db_config)
-            logger = __import__('logging').getLogger(__name__)
-            logger.info("服务器 %s 密码轮换结果: %s", server.get('hostname'), result.get('message'))
+            try:
+                result = rotate_server_password(server, db_config, password_length)
+                logger.info("服务器 %s 密码轮换结果: %s", server.get('hostname'), result.get('message'))
+            except Exception as e:
+                logger.exception("服务器 %s 密码轮换线程异常: %s", server.get('hostname'), e)
+                # 异常时更新数据库状态为 failed
+                try:
+                    import pymysql
+                    err_conn = pymysql.connect(**db_config)
+                    err_cursor = err_conn.cursor()
+                    err_cursor.execute(
+                        "UPDATE servers SET password_rotation_status = 'failed', password_rotation_error = %s WHERE id = %s",
+                        (f'线程异常: {str(e)}'[:1000], server_id)
+                    )
+                    err_conn.commit()
+                    err_cursor.close()
+                    err_conn.close()
+                except Exception:
+                    pass
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()

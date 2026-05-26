@@ -1086,7 +1086,7 @@ def trigger_notify():
             SELECT c.id, c.domain, p.project_name, c.remaining_days, c.cert_expire_time
             FROM ssl_certificates c
             LEFT JOIN projects p ON c.project_id = p.id
-            WHERE c.remaining_days <= %s AND c.status = 1
+            WHERE c.remaining_days <= %s
             ORDER BY c.remaining_days ASC
         """
         cursor.execute(sql, (warning_days,))

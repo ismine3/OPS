@@ -165,7 +165,7 @@ def export_excel():
         with db.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.env_type
+                SELECT s.*, sv.hostname, sv.inner_ip as server_inner_ip, sv.inner_ip, sv.public_ip, sv.env_type
                 FROM services s
                 LEFT JOIN servers sv ON s.server_id = sv.id
                 ORDER BY s.id
@@ -299,7 +299,12 @@ def export_excel():
         ]
 
         with db.cursor() as cursor:
-            cursor.execute("SELECT * FROM ssl_certificates ORDER BY id")
+            cursor.execute("""
+                SELECT c.*, p.project_name
+                FROM ssl_certificates c
+                LEFT JOIN projects p ON c.project_id = p.id
+                ORDER BY c.id
+            """)
             certs = cursor.fetchall()
 
         for col_idx, header in enumerate(headers5, 1):

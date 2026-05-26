@@ -578,10 +578,11 @@ def auto_cert_check_and_notify(db_config, app_config):
         warning_days_raw = get_effective_config(db_config, 'ssl_warning_days', '30')
         warning_days = int(warning_days_raw) if warning_days_raw else 30
         cursor.execute("""
-            SELECT id, domain, project_name, cert_expire_time, remaining_days
-            FROM ssl_certificates
-            WHERE cert_type = 0 AND remaining_days IS NOT NULL AND remaining_days <= %s
-            ORDER BY remaining_days ASC
+            SELECT sc.id, sc.domain, p.project_name, sc.cert_expire_time, sc.remaining_days
+            FROM ssl_certificates sc
+            LEFT JOIN projects p ON sc.project_id = p.id
+            WHERE sc.cert_type = 0 AND sc.remaining_days IS NOT NULL AND sc.remaining_days <= %s
+            ORDER BY sc.remaining_days ASC
         """, (warning_days,))
         
         warning_certs = cursor.fetchall()

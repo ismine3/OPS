@@ -51,8 +51,17 @@
         <el-table-column prop="category" label="分类" min-width="100" />
         <el-table-column prop="service_name" label="服务名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" min-width="100" />
-        <el-table-column prop="inner_port" label="内部端口" min-width="100" align="center" />
-        <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
+        <el-table-column label="端口映射" min-width="180" align="center">
+          <template #default="{ row }">
+            <template v-if="row.ports && row.ports.length">
+              <div v-for="(p, idx) in row.ports" :key="idx" class="port-mapping-row">
+                {{ p.inner_port }}<template v-if="p.mapped_port">→{{ p.mapped_port }}</template>
+                <span class="port-protocol-tag">{{ p.protocol }}</span>
+              </div>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="account" label="账户" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.account" class="account-cell">
@@ -133,18 +142,43 @@
         <el-form-item label="版本" prop="version">
           <el-input v-model="form.version" placeholder="如：8.0、6.2" />
         </el-form-item>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="内部端口" prop="inner_port">
-              <el-input v-model="form.inner_port" placeholder="如：3306" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="映射端口" prop="mapped_port">
-              <el-input v-model="form.mapped_port" placeholder="如：13306" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="端口映射">
+          <el-table :data="portList" size="small" border style="width: 100%" max-height="228">
+            <el-table-column label="内网端口" width="115">
+              <template #default="{ row, $index }">
+                <el-input-number v-model="row.inner_port" :min="1" :max="65535" placeholder="80" size="small" controls-position="right" style="width: 100%" />
+              </template>
+            </el-table-column>
+            <el-table-column label="映射端口" width="115">
+              <template #default="{ row }">
+                <el-input-number v-model="row.mapped_port" :min="1" :max="65535" placeholder="180" size="small" controls-position="right" style="width: 100%" />
+              </template>
+            </el-table-column>
+            <el-table-column label="协议" width="82">
+              <template #default="{ row }">
+                <el-select v-model="row.protocol" size="small" style="width: 100%">
+                  <el-option label="TCP" value="TCP" />
+                  <el-option label="UDP" value="UDP" />
+                  <el-option label="HTTP" value="HTTP" />
+                  <el-option label="HTTPS" value="HTTPS" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" width="106">
+              <template #default="{ row }">
+                <el-input v-model="row.remark" placeholder="备注" size="small" />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="54" align="center">
+              <template #default="{ $index }">
+                <el-button type="danger" size="small" :icon="Delete" circle @click="removePortRow($index)" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button type="primary" size="small" style="margin-top: 8px" @click="addPortRow">
+            <el-icon><Plus /></el-icon>添加端口映射
+          </el-button>
+        </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="账户" prop="account">
@@ -177,14 +211,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, CopyDocument } from '@element-plus/icons-vue'
+import { Plus, CopyDocument, Delete } from '@element-plus/icons-vue'
 import { getServices, createService, updateService, deleteService } from '../api/services'
 import { getServerOptions } from '../api/servers'
 import { getEnvTypes, getServiceCategories } from '../api/dicts'
 import { getProjectOptions } from '../api/projects'
 import PasswordDisplay from '../components/PasswordDisplay.vue'
 // @ts-ignore: validators.js is a JavaScript file without type declarations
-import { safeText, maxLength, portValidator, isSafeSearch } from '@/utils/validators'
+import { safeText, maxLength, isSafeSearch } from '@/utils/validators'
 
 const loading = ref<boolean>(false)
 const submitLoading = ref<boolean>(false)
@@ -217,13 +251,13 @@ const form = reactive({
   category: '',
   service_name: '',
   version: '',
-  inner_port: '',
-  mapped_port: '',
   account: '',
   password: '',
   project_ids: [] as number[],
   remark: ''
 })
+
+const portList = ref<any[]>([])
 
 const rules = {
   server_id: [{ required: true, message: '请选择所属服务器', trigger: 'change' }],
@@ -236,12 +270,6 @@ const rules = {
   version: [
     { validator: safeText, trigger: 'blur' },
     { validator: maxLength(50), trigger: 'blur' }
-  ],
-  inner_port: [
-    { validator: portValidator, trigger: 'blur' }
-  ],
-  mapped_port: [
-    { validator: portValidator, trigger: 'blur' }
   ],
   remark: [
     { validator: safeText, trigger: 'blur' },
@@ -316,17 +344,24 @@ function handleReset() {
   fetchData()
 }
 
+function addPortRow() {
+  portList.value.push({ inner_port: null, mapped_port: null, protocol: 'TCP', remark: '' })
+}
+
+function removePortRow(index: number) {
+  portList.value.splice(index, 1)
+}
+
 function resetForm() {
   form.server_id = ''
   form.category = ''
   form.service_name = ''
   form.version = ''
-  form.inner_port = ''
-  form.mapped_port = ''
   form.account = ''
   form.password = ''
   form.project_ids = []
   form.remark = ''
+  portList.value = []
 }
 
 function handleAdd() {
@@ -344,6 +379,10 @@ function handleEdit(row: any) {
   editingId.value = row.id
   Object.assign(form, row)
   form.project_ids = row.project_ids || []
+  // 填充端口映射表
+  portList.value = (row.ports && row.ports.length > 0)
+    ? row.ports.map((p: any) => ({ ...p }))
+    : []
   dialogVisible.value = true
 }
 
@@ -353,14 +392,23 @@ async function handleSubmit() {
   
   submitLoading.value = true
   try {
+    // 从端口映射表构建 ports 数据
+    const ports = portList.value
+      .filter((p: any) => p.inner_port)
+      .map((p: any) => ({
+        inner_port: p.inner_port,
+        mapped_port: p.mapped_port || null,
+        protocol: p.protocol || 'TCP',
+        remark: p.remark || ''
+      }))
+    
     // 构建提交数据，确保字段类型正确
     const submitData = {
       server_id: Number(form.server_id) || null,
       category: form.category,
       service_name: form.service_name,
       version: form.version,
-      inner_port: form.inner_port,
-      mapped_port: form.mapped_port,
+      ports: ports,
       account: form.account,
       password: form.password,
       project_ids: form.project_ids,
@@ -408,13 +456,6 @@ function getEnvTagType(env: string) {
     '水电集团': 'primary'
   }
   return map[env] || 'info'
-}
-
-/**
- * @param {string} ports
- */
-function parsePorts(ports: string) {
-  return ports.split(',').map(port => port.trim()).filter(port => port)
 }
 
 function copyText(text: string) {
@@ -485,6 +526,20 @@ function copyText(text: string) {
 
 .clickable-tag:hover {
   opacity: 0.8;
+}
+
+.port-mapping-row {
+  line-height: 1.8;
+  font-size: 13px;
+}
+
+.port-protocol-tag {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #909399;
+  background: #f0f2f5;
+  padding: 0 4px;
+  border-radius: 2px;
 }
 
 </style>

@@ -107,8 +107,17 @@
         <el-table-column prop="category" label="分类" min-width="100" />
         <el-table-column prop="service_name" label="服务名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" min-width="100" />
-        <el-table-column prop="inner_port" label="内部端口" min-width="100" align="center" />
-        <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
+        <el-table-column label="端口映射" min-width="180" align="center">
+          <template #default="{ row }">
+            <template v-if="row.ports && row.ports.length">
+              <div v-for="(p, idx) in row.ports" :key="idx" class="port-mapping-row">
+                {{ p.inner_port }}<template v-if="p.mapped_port">→{{ p.mapped_port }}</template>
+                <span class="port-protocol-tag">{{ p.protocol }}</span>
+              </div>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
       </el-table>
       <el-empty v-if="!services.length && !loading" description="暂无关联服务" />
@@ -251,7 +260,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, SetUp, ArrowLeft, Folder, Edit } from '@element-plus/icons-vue'
+import { Monitor, SetUp, ArrowLeft, Folder } from '@element-plus/icons-vue'
 import { getServerDetail, updateServer, triggerPasswordRotation } from '../api/servers'
 import { getEnvTypes, getPlatforms } from '../api/dicts'
 import { getProjectOptions } from '../api/projects'
@@ -523,5 +532,19 @@ async function handleEditSubmit() {
 
 .services-card {
   margin-bottom: 0;
+}
+
+.port-mapping-row {
+  line-height: 1.8;
+  font-size: 13px;
+}
+
+.port-protocol-tag {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #909399;
+  background: #f0f2f5;
+  padding: 0 4px;
+  border-radius: 2px;
 }
 </style>

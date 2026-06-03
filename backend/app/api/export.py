@@ -153,8 +153,7 @@ def export_excel():
             "分类",
             "服务名称",
             "版本",
-            "内部端口",
-            "映射端口",
+            "端口映射详情",
             "外网IP",
             "内网IP",
             "服务账户",
@@ -173,6 +172,23 @@ def export_excel():
             )
             services = cursor.fetchall()
 
+            # 批量查所有服务的端口映射
+            service_ids = [s['id'] for s in services]
+            port_map = {}
+            if service_ids:
+                placeholders = ','.join(['%s'] * len(service_ids))
+                cursor.execute(f"""
+                    SELECT service_id, inner_port, mapped_port, protocol
+                    FROM service_ports
+                    WHERE service_id IN ({placeholders})
+                    ORDER BY id
+                """, service_ids)
+                for row in cursor.fetchall():
+                    sid = row['service_id']
+                    if sid not in port_map:
+                        port_map[sid] = []
+                    port_map[sid].append(row)
+
         for col_idx, header in enumerate(headers2, 1):
             cell = ws2.cell(row=1, column=col_idx, value=header)
             for key, value in header_style.items():
@@ -180,6 +196,12 @@ def export_excel():
 
         data_rows2 = []
         for idx, service in enumerate(services, 1):
+            ports = port_map.get(service['id'], [])
+            # 拼接端口映射详情: "80→180, 443→1443"
+            port_detail = ', '.join(
+                f"{p['inner_port']}→{p['mapped_port']}" if p.get('mapped_port') else str(p['inner_port'])
+                for p in ports
+            )
             row_data = [
                 idx,
                 safe_value(service.get("hostname")),
@@ -188,8 +210,7 @@ def export_excel():
                 safe_value(service.get("category")),
                 safe_value(service.get("service_name")),
                 safe_value(service.get("version")),
-                safe_value(service.get("inner_port")),
-                safe_value(service.get("mapped_port")),
+                safe_value(port_detail),
                 safe_value(service.get("public_ip")),
                 safe_value(service.get("inner_ip")),
                 safe_value(safe_decrypt(service.get("account", ""))),

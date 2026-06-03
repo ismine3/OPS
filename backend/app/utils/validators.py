@@ -77,6 +77,20 @@ def validate_port(port):
         return False
 
 
+def validate_single_port(port):
+    """
+    验证单个端口号（1-65535），支持字符串或整数
+    用于 service_ports 表的端口校验
+    """
+    if port is None:
+        return True  # 允许为空（仅 mapped_port 可选）
+    try:
+        port_num = int(port)
+        return 1 <= port_num <= 65535
+    except (ValueError, TypeError):
+        return False
+
+
 def validate_domain(domain):
     """
     验证域名格式

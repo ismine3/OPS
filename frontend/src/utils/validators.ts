@@ -124,6 +124,23 @@ export const portValidator = (_rule: any, value: any, callback: (error?: Error) 
 }
 
 /**
+ * 单端口验证 - Element Plus validator
+ * 验证单个端口 1-65535（用于端口映射表）
+ */
+export const singlePortValidator = (_rule: any, value: any, callback: (error?: Error) => void) => {
+  if (value === null || value === undefined || value === '') {
+    callback()
+    return
+  }
+  const num = Number(value)
+  if (isNaN(num) || num < 1 || num > 65535) {
+    callback(new Error('端口号必须在 1-65535 之间'))
+  } else {
+    callback()
+  }
+}
+
+/**
  * 域名验证 - 纯函数
  * 支持通配符域名（*.example.com）
  */

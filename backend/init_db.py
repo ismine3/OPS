@@ -116,8 +116,6 @@ def init_database():
         `category` VARCHAR(100) COMMENT '服务分类',
         `service_name` VARCHAR(200) NOT NULL COMMENT '服务名',
         `version` VARCHAR(100) COMMENT '版本',
-        `inner_port` VARCHAR(200) COMMENT '内网端口',
-        `mapped_port` VARCHAR(200) COMMENT '外网映射端口',
         `account` VARCHAR(255) COMMENT '服务账户',
         `password` VARCHAR(255) COMMENT '服务密码',
         `remark` TEXT COMMENT '备注',

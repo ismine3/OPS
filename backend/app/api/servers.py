@@ -206,6 +206,24 @@ def get_server_detail(server_id):
         )
         services = cursor.fetchall()
         
+        # 批量查询端口映射数据
+        if services:
+            service_ids = [s['id'] for s in services]
+            placeholders = ','.join(['%s'] * len(service_ids))
+            cursor.execute(f"""
+                SELECT id, service_id, inner_port, mapped_port, protocol, remark
+                FROM service_ports WHERE service_id IN ({placeholders}) ORDER BY id
+            """, service_ids)
+            port_rows = cursor.fetchall()
+            port_map = {}
+            for p in port_rows:
+                sid = p['service_id']
+                if sid not in port_map:
+                    port_map[sid] = []
+                port_map[sid].append(p)
+            for s in services:
+                s['ports'] = port_map.get(s['id'], [])
+        
         # 查询关联的项目列表
         cursor.execute(
             "SELECT p.id, p.project_name, p.status FROM projects p "

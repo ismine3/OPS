@@ -6,7 +6,7 @@ from ..utils.db import get_db
 from ..utils.decorators import jwt_required, role_required, module_required
 from ..utils.operation_log import log_operation
 from ..utils.password_utils import encrypt_data, decrypt_data
-from ..utils.validators import validate_port, validate_string_length
+from ..utils.validators import validate_string_length, validate_single_port
 from .users import get_user_allowed_envs
 import logging
 
@@ -98,12 +98,35 @@ def get_services():
                     project_map[sid] = []
                 project_map[sid].append({'id': row['id'], 'name': row['project_name']})
 
+        # 批量查所有服务的端口映射
+        port_map = {}
+        if service_ids:
+            cursor.execute(f"""
+                SELECT id, service_id, inner_port, mapped_port, protocol, remark
+                FROM service_ports
+                WHERE service_id IN ({placeholders})
+                ORDER BY id
+            """, service_ids)
+            for row in cursor.fetchall():
+                sid = row['service_id']
+                if sid not in port_map:
+                    port_map[sid] = []
+                port_map[sid].append({
+                    'id': row['id'],
+                    'inner_port': row['inner_port'],
+                    'mapped_port': row['mapped_port'],
+                    'protocol': row['protocol'],
+                    'remark': row['remark']
+                })
+
         for s in services:
             projects = project_map.get(s['id'], [])
             s['project_ids'] = [p['id'] for p in projects]
             s['project_names'] = [p['name'] for p in projects]
             s['project_id'] = s['project_ids'][0] if s['project_ids'] else None
             s['project_name'] = s['project_names'][0] if s['project_names'] else None
+            ports = port_map.get(s['id'], [])
+            s['ports'] = ports
             if s.get('password'):
                 try:
                     s['password'] = decrypt_data(s['password'])
@@ -152,13 +175,19 @@ def create_service():
         if version and not validate_string_length(version, max_len=50):
             return jsonify({'code': 400, 'message': '版本号长度不能超过50个字符'}), 400
 
-        inner_port = data.get('inner_port')
-        if inner_port and not validate_port(inner_port):
-            return jsonify({'code': 400, 'message': '内网端口范围应为1-65535，多个端口用逗号分隔'}), 400
-
-        mapped_port = data.get('mapped_port')
-        if mapped_port and not validate_port(mapped_port):
-            return jsonify({'code': 400, 'message': '映射端口范围应为1-65535，多个端口用逗号分隔'}), 400
+        # 验证 ports 数组（新的端口映射格式）
+        ports_list = data.get('ports') or []
+        if not isinstance(ports_list, list):
+            return jsonify({'code': 400, 'message': 'ports 必须是数组'}), 400
+        for p in ports_list:
+            if not isinstance(p, dict):
+                return jsonify({'code': 400, 'message': 'ports 每项必须是对象'}), 400
+            inner = p.get('inner_port')
+            if inner is None or not validate_single_port(inner):
+                return jsonify({'code': 400, 'message': f'内网端口无效: {inner}'}), 400
+            mapped = p.get('mapped_port')
+            if mapped is not None and not validate_single_port(mapped):
+                return jsonify({'code': 400, 'message': f'映射端口无效: {mapped}'}), 400
 
         account = data.get('account')
         if account and not validate_string_length(account, max_len=100):
@@ -170,10 +199,10 @@ def create_service():
 
         password_encrypted = encrypt_data(data['password']) if data.get('password') else None
         cursor.execute(
-            "INSERT INTO services (server_id, category, service_name, version, inner_port, mapped_port, account, password, remark) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO services (server_id, category, service_name, version, account, password, remark) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
             (data.get('server_id'), data.get('category'), data.get('service_name'),
-             data.get('version'), data.get('inner_port'), data.get('mapped_port'),
+             data.get('version'),
              data.get('account'), password_encrypted,
              data.get('remark'))
         )
@@ -185,6 +214,14 @@ def create_service():
                 cursor.execute(
                     "INSERT IGNORE INTO service_projects (service_id, project_id) VALUES (%s, %s)",
                     (service_id, pid)
+                )
+        # 插入端口映射
+        if ports_list:
+            for p in ports_list:
+                cursor.execute(
+                    "INSERT INTO service_ports (service_id, inner_port, mapped_port, protocol, remark) VALUES (%s,%s,%s,%s,%s)",
+                    (service_id, p.get('inner_port'), p.get('mapped_port') or None,
+                     p.get('protocol', 'TCP'), p.get('remark', ''))
                 )
         db.commit()
         log_operation('服务管理', 'create', service_id, data.get('service_name'),
@@ -222,12 +259,20 @@ def update_service(service_id):
         if 'version' in data and data['version']:
             if not validate_string_length(data['version'], max_len=50):
                 return jsonify({'code': 400, 'message': '版本号长度不能超过50个字符'}), 400
-        if 'inner_port' in data and data['inner_port']:
-            if not validate_port(data['inner_port']):
-                return jsonify({'code': 400, 'message': '内网端口范围应为1-65535，多个端口用逗号分隔'}), 400
-        if 'mapped_port' in data and data['mapped_port']:
-            if not validate_port(data['mapped_port']):
-                return jsonify({'code': 400, 'message': '映射端口范围应为1-65535，多个端口用逗号分隔'}), 400
+        # 验证 ports 数组
+        if 'ports' in data:
+            ports_list = data['ports']
+            if not isinstance(ports_list, list):
+                return jsonify({'code': 400, 'message': 'ports 必须是数组'}), 400
+            for p in ports_list:
+                if not isinstance(p, dict):
+                    return jsonify({'code': 400, 'message': 'ports 每项必须是对象'}), 400
+                inner = p.get('inner_port')
+                if inner is None or not validate_single_port(inner):
+                    return jsonify({'code': 400, 'message': f'内网端口无效: {inner}'}), 400
+                mapped = p.get('mapped_port')
+                if mapped is not None and not validate_single_port(mapped):
+                    return jsonify({'code': 400, 'message': f'映射端口无效: {mapped}'}), 400
         if 'account' in data and data['account']:
             if not validate_string_length(data['account'], max_len=100):
                 return jsonify({'code': 400, 'message': '账户名长度不能超过100个字符'}), 400
@@ -239,7 +284,7 @@ def update_service(service_id):
             data['password'] = encrypt_data(data['password'])
         fields = []
         values = []
-        for key in ['server_id', 'category', 'service_name', 'version', 'inner_port', 'mapped_port', 'account', 'password', 'remark']:
+        for key in ['server_id', 'category', 'service_name', 'version', 'account', 'password', 'remark']:
             if key in data:
                 fields.append(f"`{key}` = %s")
                 values.append(data[key])
@@ -253,6 +298,15 @@ def update_service(service_id):
                 cursor.execute(
                     "INSERT IGNORE INTO service_projects (service_id, project_id) VALUES (%s, %s)",
                     (service_id, pid)
+                )
+        # 同步端口映射
+        if 'ports' in data:
+            cursor.execute("DELETE FROM service_ports WHERE service_id = %s", (service_id,))
+            for p in ports_list:
+                cursor.execute(
+                    "INSERT INTO service_ports (service_id, inner_port, mapped_port, protocol, remark) VALUES (%s,%s,%s,%s,%s)",
+                    (service_id, p.get('inner_port'), p.get('mapped_port') or None,
+                     p.get('protocol', 'TCP'), p.get('remark', ''))
                 )
         db.commit()
         log_operation('服务管理', 'update', service_id, data.get('service_name') or service_name,

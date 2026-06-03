@@ -72,8 +72,16 @@
             <el-table-column prop="category" label="分类" min-width="100" />
             <el-table-column prop="server_hostname" label="所在服务器" min-width="150" show-overflow-tooltip />
             <el-table-column prop="version" label="版本" min-width="100" />
-            <el-table-column prop="inner_port" label="端口" min-width="80" align="center" />
-            <el-table-column prop="mapped_port" label="映射端口" min-width="100" align="center" />
+            <el-table-column label="端口映射" min-width="170" align="center">
+              <template #default="{ row }">
+                <template v-if="row.ports && row.ports.length">
+                  <div v-for="(p, idx) in row.ports" :key="idx" class="port-mapping-row">
+                    {{ p.inner_port }}<template v-if="p.mapped_port">→{{ p.mapped_port }}</template>
+                  </div>
+                </template>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
           </el-table>
           <el-empty v-if="!services.length && !loading" description="暂无关联服务" />
         </el-tab-pane>
@@ -190,8 +198,7 @@ interface Service {
   category: string
   server_hostname: string
   version: string
-  inner_port: number
-  mapped_port: number | null
+  ports?: Array<{ inner_port: number; mapped_port: number | null; protocol: string; remark?: string }>
 }
 
 interface Domain {
@@ -264,7 +271,7 @@ async function handleBindServers() {
     const allServers = res.data?.items || []
     // 过滤掉已关联的服务器
     const boundIds = servers.value.map((s) => s.id)
-    availableServers.value = allServers.filter((s) => !boundIds.includes(s.id))
+    availableServers.value = allServers.filter((s: any) => !boundIds.includes(s.id))
     bindDialogVisible.value = true
   } catch (e) {
     console.error('加载服务器列表失败', e)
@@ -396,5 +403,10 @@ function getDomainStatusType(status: string | number): 'success' | 'warning' | '
 
 .tab-toolbar {
   margin-bottom: 16px;
+}
+
+.port-mapping-row {
+  line-height: 1.8;
+  font-size: 13px;
 }
 </style>

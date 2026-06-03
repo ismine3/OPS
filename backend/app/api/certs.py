@@ -48,6 +48,39 @@ def _parse_date(date_value):
     raise ValueError(f'日期格式错误: {date_value}，请使用YYYY-MM-DD格式')
 
 
+def _compute_status(remaining_days, cursor=None):
+    """
+    根据剩余天数计算证书状态
+    返回: '已过期' | '即将过期' | '正常'
+    预警天数阈值优先从 system_config 读取，fallback 到环境变量（默认30天）
+    """
+    if remaining_days is None or remaining_days <= 0:
+        return '已过期'
+    
+    # 动态读取预警天数阈值
+    warning_days = 30
+    if cursor:
+        try:
+            cursor.execute("SELECT config_value FROM system_config WHERE config_key = 'ssl_warning_days'")
+            row = cursor.fetchone()
+            if row and row['config_value']:
+                warning_days = int(row['config_value'])
+        except Exception:
+            try:
+                warning_days = current_app.config.get('SSL_WARNING_DAYS', 30)
+            except RuntimeError:
+                pass
+    else:
+        try:
+            warning_days = current_app.config.get('SSL_WARNING_DAYS', 30)
+        except RuntimeError:
+            pass
+    
+    if remaining_days <= warning_days:
+        return '即将过期'
+    return '正常'
+
+
 def _parse_cert_file(cert_content):
     """
     解析证书文件内容，提取证书信息
@@ -200,13 +233,34 @@ def get_certs():
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
         
-        # 查询分页数据
+        # 从 system_config 动态读取预警天数阈值，确保状态计算一致
+        warning_days = 30
+        try:
+            cursor.execute(
+                "SELECT config_value FROM system_config WHERE config_key = 'ssl_warning_days'"
+            )
+            row = cursor.fetchone()
+            if row and row['config_value']:
+                warning_days = int(row['config_value'])
+        except Exception:
+            try:
+                warning_days = current_app.config.get('SSL_WARNING_DAYS', 30)
+            except RuntimeError:
+                pass
+        
+        # 查询分页数据（status 使用 CASE 动态计算，与系统配置阈值实时同步）
         data_sql = f"""
             SELECT 
                 c.id, c.domain, c.cert_type, c.issuer, 
                 c.cert_generate_time, c.cert_valid_days, c.cert_expire_time,
                 DATEDIFF(c.cert_expire_time, NOW()) as remaining_days,
-                c.brand, c.cost, c.status, c.last_check_time, c.last_notify_time, 
+                CASE
+                    WHEN c.cert_expire_time IS NULL THEN '未知'
+                    WHEN DATEDIFF(c.cert_expire_time, NOW()) <= 0 THEN '已过期'
+                    WHEN DATEDIFF(c.cert_expire_time, NOW()) <= %s THEN '即将过期'
+                    ELSE '正常'
+                END as status,
+                c.brand, c.cost, c.last_check_time, c.last_notify_time, 
                 c.notify_status, c.source, c.aliyun_account_id, c.remark,
                 c.has_cert_file, c.cert_file_path, c.key_file_path,
                 c.created_at, c.updated_at, c.project_id,
@@ -215,7 +269,7 @@ def get_certs():
             ORDER BY c.cert_expire_time ASC, c.id DESC
             LIMIT %s OFFSET %s
         """
-        params.extend([page_size, offset])
+        params.extend([warning_days, page_size, offset])
         cursor.execute(data_sql, params)
         certs = cursor.fetchall()
         
@@ -269,7 +323,7 @@ def create_cert():
         cert_expire_time = data.get('cert_expire_time')
         brand = data.get('brand', '')
         cost = data.get('cost')
-        status = data.get('status', 1)  # 默认正常
+        status = data.get('status', '正常')  # 默认正常
         remark = data.get('remark', '')
         
         # 计算剩余天数
@@ -391,7 +445,7 @@ def upload_and_create_cert():
         cert_expire_time = cert_info['not_after']
         cert_valid_days = cert_info['valid_days']
         remaining_days = cert_info['remaining_days']
-        status = 1 if remaining_days > 0 else 0
+        status = _compute_status(remaining_days, cursor)
         
         # 检查域名是否已存在
         cursor.execute("SELECT id FROM ssl_certificates WHERE domain = %s", (domain,))
@@ -654,7 +708,7 @@ def batch_check_certs():
                         updated_at = NOW()
                     WHERE id = %s
                 """
-                status = 1 if cert_info['remaining_days'] > 0 else 0
+                status = _compute_status(cert_info['remaining_days'], cursor)
                 cursor.execute(update_sql, (
                     cert_info['issuer'],
                     cert_info['not_before'],
@@ -756,7 +810,7 @@ def check_single_cert(cert_id):
                     updated_at = NOW()
                 WHERE id = %s
             """
-            status = 1 if cert_info['remaining_days'] > 0 else 0
+            status = _compute_status(cert_info['remaining_days'], cursor)
             cursor.execute(update_sql, (
                 cert_info['issuer'],
                 cert_info['not_before'],
@@ -909,7 +963,7 @@ def sync_aliyun_certs():
                             status = %s, aliyun_account_id = %s, updated_at = NOW()
                         WHERE id = %s
                     """
-                    status = 1 if cert_info['remaining_days'] > 0 else 0
+                    status = _compute_status(cert_info['remaining_days'], cursor)
                     cursor.execute(update_sql, (
                         cert_info['issuer'],
                         cert_info['not_before'],
@@ -973,7 +1027,7 @@ def sync_aliyun_certs():
                  source, aliyun_account_id, status, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """
-            status = 1 if cert_info['remaining_days'] > 0 else 0
+            status = _compute_status(cert_info['remaining_days'], cursor)
 
             cursor.execute(insert_sql, (
                 domain,
@@ -1081,13 +1135,16 @@ def trigger_notify():
         if not webhook_url:
             return jsonify({'code': 500, 'message': '未配置微信Webhook地址'}), 500
         
-        # 查询即将过期的证书
+        # 查询即将过期的证书（基于 cert_expire_time 动态计算 remaining_days）
         sql = """
-            SELECT c.id, c.domain, p.project_name, c.remaining_days, c.cert_expire_time
+            SELECT c.id, c.domain, p.project_name,
+                   DATEDIFF(c.cert_expire_time, NOW()) as remaining_days,
+                   c.cert_expire_time
             FROM ssl_certificates c
             LEFT JOIN projects p ON c.project_id = p.id
-            WHERE c.remaining_days <= %s
-            ORDER BY c.remaining_days ASC
+            WHERE c.cert_expire_time IS NOT NULL
+              AND DATEDIFF(c.cert_expire_time, NOW()) <= %s
+            ORDER BY remaining_days ASC
         """
         cursor.execute(sql, (warning_days,))
         certs = cursor.fetchall()

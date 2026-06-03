@@ -141,6 +141,22 @@ def init_database():
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务-项目关联表';
     """)
 
+    # 5.2 服务端口映射表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS `service_ports` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `service_id` INT NOT NULL COMMENT '服务ID',
+        `inner_port` INT NOT NULL COMMENT '内网端口',
+        `mapped_port` INT DEFAULT NULL COMMENT '外网映射端口',
+        `protocol` VARCHAR(10) DEFAULT 'TCP' COMMENT '协议: TCP/UDP/HTTP/HTTPS',
+        `remark` VARCHAR(100) COMMENT '备注',
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_service_id` (`service_id`),
+        FOREIGN KEY (`service_id`) REFERENCES `services`(`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务端口映射表';
+    """)
+
     # 10. 环境类型字典表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `dict_env_types` (

@@ -84,14 +84,38 @@ def get_domains():
         cursor.execute(count_sql, params)
         total = cursor.fetchone()['total']
         
-        # 查询分页数据
+        # 从 system_config 动态读取预警天数阈值
+        warning_days = 30
+        try:
+            cursor.execute(
+                "SELECT config_value FROM system_config WHERE config_key = 'domain_warning_days'"
+            )
+            row = cursor.fetchone()
+            if row and row['config_value']:
+                warning_days = int(row['config_value'])
+        except Exception:
+            try:
+                warning_days = current_app.config.get('DOMAIN_WARNING_DAYS', 30)
+            except RuntimeError:
+                pass
+        
+        # 查询分页数据（status 使用 CASE 动态计算，与系统配置阈值实时同步）
         data_sql = f"""
-            SELECT d.*, c.credential_name as aliyun_account_name, p.project_name
+            SELECT d.id, d.domain_name, d.registrar, d.registration_date, d.expire_date,
+                   d.owner, d.dns_servers, d.source, d.aliyun_account_id, d.cost, d.remark,
+                   d.project_id, d.created_at, d.updated_at,
+                   CASE
+                       WHEN d.expire_date IS NULL THEN d.status
+                       WHEN DATEDIFF(d.expire_date, NOW()) <= 0 THEN '已过期'
+                       WHEN DATEDIFF(d.expire_date, NOW()) <= %s THEN '即将过期'
+                       ELSE '正常'
+                   END as status,
+                   c.credential_name as aliyun_account_name, p.project_name
             {base_sql}
             ORDER BY d.id DESC
             LIMIT %s OFFSET %s
         """
-        params.extend([page_size, offset])
+        params.extend([warning_days, page_size, offset])
         cursor.execute(data_sql, params)
         domains = cursor.fetchall()
         
@@ -514,17 +538,17 @@ def sync_aliyun_domains():
                     # ExpirationDateStatus: 1-未过期, 2-已过期
                     # DomainStatus: 1-急需续费, 2-急需赎回, 3-正常
                     if expiration_status_raw == 2 or expiration_status_raw == '2':
-                        domain_status = 4  # 已过期
+                        domain_status = '已过期'
                     elif domain_status_raw in [1, '1']:
-                        domain_status = 1  # 急需续费
+                        domain_status = '急需续费'
                     elif domain_status_raw in [2, '2']:
-                        domain_status = 2  # 急需赎回
+                        domain_status = '急需赎回'
                     elif domain_status_raw in [3, '3']:
-                        domain_status = 3  # 正常
+                        domain_status = '正常'
                     elif domain_status_raw is None:
-                        domain_status = 3  # 默认正常
+                        domain_status = '正常'  # 默认正常
                     else:
-                        domain_status = domain_status_raw
+                        domain_status = str(domain_status_raw)
                     
                     domain_info = {
                         'domain_name': domain_name,

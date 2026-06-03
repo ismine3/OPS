@@ -52,10 +52,10 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" min-width="80">
+        <el-table-column label="状态" min-width="80">
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row.status)" size="small">
-              {{ getStatusText(row.status) }}
+            <el-tag :type="getDomainStatusTagType(row.status)" size="small">
+              {{ row.status || '未知' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -492,37 +492,19 @@ function getRemainingDaysTagType(expireDate: any) {
   return 'success'
 }
 
-// 根据状态获取标签类型
-function getStatusTagType(status: string) {
-  // 支持数字和中文两种格式
-  const statusMap: Record<string, string> = {
+/**
+ * 根据 status 中文文本返回标签类型
+ * status 由后端统一存储为中文文本，与系统配置阈值一致
+ */
+function getDomainStatusTagType(status: string) {
+  const map: Record<string, string> = {
     '正常': 'success',
     '即将过期': 'warning',
     '已过期': 'danger',
-    '申请中': 'info',
-    // 阿里云状态码映射
-    '1': 'danger',   // 急需续费
-    '2': 'danger',   // 急需赎回
-    '3': 'success',  // 正常
-    '4': 'danger'    // 已过期
+    '急需续费': 'danger',
+    '急需赎回': 'danger'
   }
-  return statusMap[status] || 'info'
-}
-
-// 状态显示文本转换
-function getStatusText(status: string) {
-  const textMap: Record<string, string> = {
-    '正常': '正常',
-    '即将过期': '即将过期',
-    '已过期': '已过期',
-    '申请中': '申请中',
-    // 阿里云状态码映射
-    '1': '急需续费',
-    '2': '急需赎回',
-    '3': '正常',
-    '4': '已过期'
-  }
-  return textMap[status] || status || '-'
+  return map[status] || 'info'
 }
 
 // 格式化费用

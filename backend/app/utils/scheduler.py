@@ -553,15 +553,27 @@ def auto_cert_check_and_notify(db_config, app_config):
                                 pass
                 
                 if cert_info:
+                    # 计算三值状态: '已过期' | '即将过期' | '正常'
+                    warning_days_raw = get_effective_config(db_config, 'ssl_warning_days', '30')
+                    warning_days = int(warning_days_raw) if warning_days_raw else 30
+                    remaining = cert_info['remaining_days']
+                    if remaining <= 0:
+                        cert_status = '已过期'
+                    elif remaining <= warning_days:
+                        cert_status = '即将过期'
+                    else:
+                        cert_status = '正常'
+                    
                     # 更新数据库
                     cursor.execute("""
                         UPDATE ssl_certificates 
-                        SET cert_expire_time = %s, remaining_days = %s, 
+                        SET cert_expire_time = %s, remaining_days = %s, status = %s,
                             last_check_time = %s, updated_at = %s
                         WHERE id = %s
                     """, (
                         cert_info['not_after'],
                         cert_info['remaining_days'],
+                        cert_status,
                         datetime.datetime.now(),
                         datetime.datetime.now(),
                         cert['id']
@@ -574,15 +586,36 @@ def auto_cert_check_and_notify(db_config, app_config):
             except Exception as e:
                 logger.error(f"证书 {cert['domain']} 检测异常: {str(e)}")
         
+        # 更新所有证书的 remaining_days 和 status（基于 cert_expire_time 动态计算）
+        # 非在线检测类型（手动录入/阿里云同步）的证书也需保持 remaining_days 和 status 最新
+        warning_days_raw = get_effective_config(db_config, 'ssl_warning_days', '30')
+        warning_days = int(warning_days_raw) if warning_days_raw else 30
+        cursor.execute("""
+            UPDATE ssl_certificates
+            SET remaining_days = DATEDIFF(cert_expire_time, NOW()),
+                status = CASE
+                    WHEN DATEDIFF(cert_expire_time, NOW()) <= 0 THEN '已过期'
+                    WHEN DATEDIFF(cert_expire_time, NOW()) <= %s THEN '即将过期'
+                    ELSE '正常'
+                END,
+                updated_at = NOW()
+            WHERE cert_expire_time IS NOT NULL
+        """, (warning_days,))
+        conn.commit()
+        updated_count = cursor.rowcount
+        logger.info(f"已更新 {updated_count} 条证书的 remaining_days 和 status（预警阈值: {warning_days} 天）")
+        
         # 查询需要预警的证书（从 system_config 动态读取天数）
         warning_days_raw = get_effective_config(db_config, 'ssl_warning_days', '30')
         warning_days = int(warning_days_raw) if warning_days_raw else 30
         cursor.execute("""
-            SELECT sc.id, sc.domain, p.project_name, sc.cert_expire_time, sc.remaining_days
+            SELECT sc.id, sc.domain, p.project_name, sc.cert_expire_time,
+                   DATEDIFF(sc.cert_expire_time, NOW()) as remaining_days
             FROM ssl_certificates sc
             LEFT JOIN projects p ON sc.project_id = p.id
-            WHERE sc.cert_type = 0 AND sc.remaining_days IS NOT NULL AND sc.remaining_days <= %s
-            ORDER BY sc.remaining_days ASC
+            WHERE sc.cert_expire_time IS NOT NULL
+              AND DATEDIFF(sc.cert_expire_time, NOW()) <= %s
+            ORDER BY remaining_days ASC
         """, (warning_days,))
         
         warning_certs = cursor.fetchall()

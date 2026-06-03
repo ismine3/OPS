@@ -71,9 +71,9 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" min-width="80">
+        <el-table-column label="状态" min-width="80">
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+            <el-tag :type="getStatusTagType(row.status)" size="small">{{ row.status || '未知' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="last_check_time" label="最后检测" min-width="120">
@@ -178,11 +178,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="所属项目" prop="project_id">
-          <el-select v-model="form.project_id" placeholder="请选择项目" clearable style="width: 100%">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
@@ -456,7 +451,7 @@ const pagination = reactive({
 
 const form = reactive({
   domain: '',
-  cert_type: 0,
+  cert_type: 1,
   issuer: '',
   cert_expire_time: '',
   brand: '',
@@ -617,7 +612,7 @@ function handleReset() {
 function resetForm() {
   Object.assign(form, {
     domain: '',
-    cert_type: 0,
+    cert_type: 1,
     issuer: '',
     cert_expire_time: '',
     brand: '',
@@ -990,6 +985,10 @@ function getDaysTagType(days: number) {
   return 'success'
 }
 
+/**
+ * 根据 status 中文文本返回标签类型
+ * status 由后端 _compute_status 统一计算，与系统配置阈值一致
+ */
 function getStatusTagType(status: string) {
   const map: Record<string, string> = {
     '正常': 'success',

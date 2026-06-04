@@ -251,7 +251,8 @@ def init_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS `task_logs` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `task_id` INT NOT NULL COMMENT '任务ID',
+        `task_id` INT NULL COMMENT '任务ID（内置任务为空）',
+        `task_name` VARCHAR(100) NULL COMMENT '任务名称（内置任务用）',
         `status` VARCHAR(50) NOT NULL COMMENT '执行状态: pending/running/success/failed',
         `start_time` DATETIME COMMENT '开始时间',
         `end_time` DATETIME COMMENT '结束时间',
@@ -261,9 +262,10 @@ def init_database():
         `triggered_by` VARCHAR(50) COMMENT '触发方式: schedule/manual',
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX `idx_task_id` (`task_id`),
+        INDEX `idx_task_name` (`task_name`),
         INDEX `idx_status` (`status`),
         INDEX `idx_created_at` (`created_at`),
-        FOREIGN KEY (`task_id`) REFERENCES `scheduled_tasks`(`id`) ON DELETE CASCADE
+        FOREIGN KEY (`task_id`) REFERENCES `scheduled_tasks`(`id`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行日志表';
     """)
 

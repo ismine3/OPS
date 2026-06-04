@@ -36,6 +36,50 @@ def get_db_connection(db_config):
     return pymysql.connect(**db_config)
 
 
+def _builtin_task_log_start(db_config, task_name):
+    """
+    为内置任务创建 task_logs 记录并返回 log_id
+    内置任务不在 scheduled_tasks 表中，task_id 设为 NULL，用 task_name 标识
+    """
+    conn = get_db_connection(db_config)
+    cursor = conn.cursor()
+    try:
+        start_time = datetime.datetime.now()
+        cursor.execute(
+            "INSERT INTO task_logs (task_id, task_name, status, start_time, triggered_by) "
+            "VALUES (NULL, %s, %s, %s, %s)",
+            (task_name, 'running', start_time, 'schedule')
+        )
+        conn.commit()
+        return conn, cursor, cursor.lastrowid, start_time
+    except Exception:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+        raise
+
+
+def _builtin_task_log_end(conn, cursor, log_id, start_time, status, output=None, error_message=None):
+    """
+    更新内置任务的 task_logs 记录
+    """
+    end_time = datetime.datetime.now()
+    try:
+        cursor.execute(
+            "UPDATE task_logs SET status = %s, end_time = %s, output = %s, error_message = %s WHERE id = %s",
+            (status, end_time, output, error_message, log_id)
+        )
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 def execute_script(task_id, script_path, db_config, execute_command=None, task_dir=None):
     """
     执行脚本并记录日志
@@ -481,10 +525,21 @@ def auto_cert_check_and_notify(db_config, app_config):
     """
     import ssl
     
+    task_name = 'SSL证书自动检测'
+    log_conn = None
+    log_cursor = None
+    log_id = None
+    
     conn = None
     cursor = None
     
     try:
+        # 创建task_logs记录
+        try:
+            log_conn, log_cursor, log_id, _ = _builtin_task_log_start(db_config, task_name)
+        except Exception:
+            pass  # 日志记录失败不影响主任务
+        
         conn = get_db_connection(db_config)
         cursor = conn.cursor()
         
@@ -496,6 +551,9 @@ def auto_cert_check_and_notify(db_config, app_config):
         certs = cursor.fetchall()
         
         logger.info(f"开始自动检测 {len(certs)} 个证书")
+        
+        check_success = 0
+        check_failed = 0
         
         # 对每个域名进行SSL证书检测
         for cert in certs:
@@ -580,11 +638,14 @@ def auto_cert_check_and_notify(db_config, app_config):
                     ))
                     conn.commit()
                     logger.info(f"证书 {cert['domain']} 检测完成，剩余 {cert_info['remaining_days']} 天")
+                    check_success += 1
                 else:
                     logger.error(f"证书 {cert['domain']} 检测失败: {last_exception}")
+                    check_failed += 1
                     
             except Exception as e:
                 logger.error(f"证书 {cert['domain']} 检测异常: {str(e)}")
+                check_failed += 1
         
         # 更新所有证书的 remaining_days 和 status（基于 cert_expire_time 动态计算）
         # 非在线检测类型（手动录入/阿里云同步）的证书也需保持 remaining_days 和 status 最新
@@ -619,6 +680,7 @@ def auto_cert_check_and_notify(db_config, app_config):
         """, (warning_days,))
         
         warning_certs = cursor.fetchall()
+        notify_count = 0
         
         if warning_certs:
             webhook_url = app_config.get('wechat_webhook_url', '')
@@ -627,6 +689,7 @@ def auto_cert_check_and_notify(db_config, app_config):
                 from .ssl_checker import send_wechat_notification
                 
                 success = send_wechat_notification(webhook_url, warning_certs)
+                notify_count = len(warning_certs)
                 
                 # 更新通知状态
                 now = datetime.datetime.now()
@@ -643,14 +706,27 @@ def auto_cert_check_and_notify(db_config, app_config):
                 logger.warning("未配置企业微信 Webhook URL，跳过证书预警通知")
         else:
             logger.info("没有需要预警的证书")
+        
+        # 记录成功日志
+        output = f"检测 {len(certs)} 个证书, 成功 {check_success}, 失败 {check_failed}, 预警通知 {notify_count} 个"
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'success', output=output)
+            log_conn = log_cursor = None
             
     except Exception as e:
         logger.error(f"自动证书检测任务执行失败: {str(e)}")
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'failed', error_message=str(e))
+            log_conn = log_cursor = None
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
+        if log_cursor:
+            log_cursor.close()
+        if log_conn:
+            log_conn.close()
 
 
 def auto_domain_notify(db_config, app_config):
@@ -658,10 +734,21 @@ def auto_domain_notify(db_config, app_config):
     自动域名到期通知回调函数
     不在Flask应用上下文中执行，从 app_config 读取配置
     """
+    task_name = '域名到期自动通知'
+    log_conn = None
+    log_cursor = None
+    log_id = None
+    
     conn = None
     cursor = None
     
     try:
+        # 创建task_logs记录
+        try:
+            log_conn, log_cursor, log_id, _ = _builtin_task_log_start(db_config, task_name)
+        except Exception:
+            pass
+        
         conn = get_db_connection(db_config)
         cursor = conn.cursor()
         
@@ -678,6 +765,7 @@ def auto_domain_notify(db_config, app_config):
         """, (warning_days,))
         
         domains = cursor.fetchall()
+        notify_count = 0
         
         if domains:
             webhook_url = app_config.get('wechat_webhook_url', '')
@@ -686,19 +774,33 @@ def auto_domain_notify(db_config, app_config):
                 from .ssl_checker import send_domain_expiry_notification
                 
                 success = send_domain_expiry_notification(webhook_url, domains)
+                notify_count = len(domains)
                 logger.info(f"域名到期通知已发送，共 {len(domains)} 个域名，结果: {'成功' if success else '失败'}")
             else:
                 logger.warning("未配置企业微信 Webhook URL，跳过域名到期通知")
         else:
             logger.info("没有需要预警的域名")
+        
+        # 记录成功日志
+        output = f"检查域名到期, 预警通知 {notify_count} 个"
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'success', output=output)
+            log_conn = log_cursor = None
             
     except Exception as e:
         logger.error(f"自动域名到期通知任务执行失败: {str(e)}")
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'failed', error_message=str(e))
+            log_conn = log_cursor = None
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
+        if log_cursor:
+            log_cursor.close()
+        if log_conn:
+            log_conn.close()
 
 
 def auto_password_rotation(db_config, app_config):
@@ -708,10 +810,21 @@ def auto_password_rotation(db_config, app_config):
     """
     from .password_rotator import rotate_server_password
     
+    task_name = '服务器密码定期轮换'
+    log_conn = None
+    log_cursor = None
+    log_id = None
+    
     conn = None
     cursor = None
     
     try:
+        # 创建task_logs记录
+        try:
+            log_conn, log_cursor, log_id, _ = _builtin_task_log_start(db_config, task_name)
+        except Exception:
+            pass
+        
         conn = get_db_connection(db_config)
         cursor = conn.cursor()
         
@@ -726,6 +839,9 @@ def auto_password_rotation(db_config, app_config):
         
         if not servers:
             logger.info("密码轮换检查完成：没有需要处理的服务器")
+            if log_conn and log_cursor and log_id:
+                _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'success', output='没有需要处理的服务器')
+                log_conn = log_cursor = None
             return
         
         logger.info(f"开始检查 {len(servers)} 台服务器的密码轮换状态")
@@ -764,11 +880,24 @@ def auto_password_rotation(db_config, app_config):
                 logger.error("服务器 %s: 密码轮换失败 - %s", hostname, result.get('message'))
         
         logger.info("密码轮换检查完成: 成功=%s, 跳过=%s, 失败=%s", rotated_count, skipped_count, failed_count)
+        
+        # 记录成功日志
+        output = f"检查 {len(servers)} 台服务器, 轮换成功 {rotated_count}, 跳过 {skipped_count}, 失败 {failed_count}"
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'success', output=output)
+            log_conn = log_cursor = None
             
     except Exception as e:
         logger.error(f"密码轮换定时任务执行失败: {str(e)}")
+        if log_conn and log_cursor and log_id:
+            _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'failed', error_message=str(e))
+            log_conn = log_cursor = None
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
+        if log_cursor:
+            log_cursor.close()
+        if log_conn:
+            log_conn.close()

@@ -708,7 +708,7 @@ def auto_cert_check_and_notify(db_config, app_config):
             logger.info("没有需要预警的证书")
         
         # 记录成功日志
-        output = f"检测 {len(certs)} 个证书, 成功 {check_success}, 失败 {check_failed}, 预警通知 {notify_count} 个"
+        output = f"在线检测 {len(certs)} 个证书(成功 {check_success}, 失败 {check_failed}), 批量更新 {updated_count} 条证书状态, 预警通知 {notify_count} 个"
         if log_conn and log_cursor and log_id:
             _builtin_task_log_end(log_conn, log_cursor, log_id, None, 'success', output=output)
             log_conn = log_cursor = None
